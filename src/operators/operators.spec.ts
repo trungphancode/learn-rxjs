@@ -12,14 +12,14 @@ describe('Operators', async () => {
   it('map with index', async () => {
     const o = cold('x-y-z|');
     const e = cold('a-b-c|', {a: '0:x', b: '1:y', c: '2:z'});
-    const operators = map((x, i) => `${i}:${x}`);
+    const operators = map((v, i) => `${i}:${v}`);
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
   it('filter with type predicate', async () => {
     const o = cold('x-y-z|');
     const e = cold('--y--|');
-    const operators = filter((value): value is 'y' => value === 'y');
+    const operators = filter((v): v is 'y' => v === 'y');
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
@@ -172,11 +172,11 @@ describe('High order operators', async () => {
   });
 
   it('zipAll: observable of observables', async () => {
-    const x = cold('        -a-b--|     ');  // subscribe after o done
-    const y = cold('        --m----n--o|');  // subscribe after o done
+    const x = cold('        -m-n--|     ');  // subscribe after o done
+    const y = cold('        --a----b--c|');  // subscribe after o done
     const o = cold('---xy---|           ', {x, y});
-    const e = cold('----------A----(B|) ', {A: 'am', B: 'bn'});
-    const operators = zipAll((a, m) => `${a}${m}`);
+    const e = cold('----------A----(B|) ', {A: 'ma', B: 'nb'});
+    const operators = zipAll((m, a) => `${m}${a}`);
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
