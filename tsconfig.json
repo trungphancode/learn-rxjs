@@ -1,6 +1,12 @@
 {
   "extends": "./node_modules/gts/tsconfig-google.json",
   "compilerOptions": {
+    "strict": true,
+    "alwaysStrict": true,
+    "strictPropertyInitialization": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictNullChecks": true,
     "rootDir": ".",
     "outDir": "build",
     "typeRoots": [

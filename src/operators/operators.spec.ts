@@ -4,8 +4,37 @@
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/operators
  */
 import {cold} from 'jasmine-marbles';
-import {pipe, throwError} from 'rxjs';
-import {catchError, combineAll, concatAll, concatMap, exhaust, exhaustMap, filter, finalize, map, mergeAll, mergeMap, repeat, switchAll, switchMap, takeUntil, tap, zipAll} from 'rxjs/operators';
+import {
+  concat,
+  defer,
+  merge,
+  MonoTypeOperatorFunction,
+  of,
+  pipe,
+  Subject,
+  throwError,
+  timer
+} from 'rxjs';
+import {
+  catchError,
+  combineAll,
+  concatAll,
+  concatMap, defaultIfEmpty,
+  exhaust,
+  exhaustMap,
+  filter,
+  finalize, groupBy,
+  map,
+  mergeAll,
+  mergeMap, reduce,
+  repeat, retry, share,
+  startWith,
+  switchAll,
+  switchMap, take,
+  takeUntil,
+  tap,
+  zipAll
+} from 'rxjs/operators';
 
 
 describe('Operators', async () => {
@@ -53,7 +82,7 @@ describe('Operators', async () => {
     const y = cold('  -c---d|     ');
     const z = cold('       -e---f|');
     const e = cold('-a-c-b-de---f|');
-    const operators = mergeMap((v: 'x'|'y'|'z') => ({x, y, z}[v]));
+    const operators = mergeMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
@@ -71,7 +100,7 @@ describe('Operators', async () => {
     const y = cold('        -c---d|      ');  // subscribe after x done
     const z = cold('              -e---f|');  // subscribe after y done
     const e = cold('---a---b-c---d-e---f|');
-    const operators = concatMap((v: 'x'|'y'|'z') => ({x, y, z}[v]));
+    const operators = concatMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
@@ -82,7 +111,7 @@ describe('Operators', async () => {
     const y = cold('    -c---d|     ');
     const z = cold('         -e---f|');
     const e = cold('---a-c----e---f|');
-    const operators = switchMap((v: 'x'|'y'|'z') => ({x, y, z}[v]));
+    const operators = switchMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
@@ -93,7 +122,7 @@ describe('Operators', async () => {
     const y = cold('    -c---d|     ');
     const z = cold('         -e---f|');
     const e = cold('---a---b--e---f|');
-    const operators = exhaustMap((v: 'x'|'y'|'z') => ({x, y, z}[v]));
+    const operators = exhaustMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
   });
 });
@@ -187,5 +216,76 @@ describe('High order operators', async () => {
     const e = cold('---------AB-C--D-|', {A: 'ma', B: 'na', C: 'nb', D: 'nc'});
     const operators = combineAll((m, a) => `${m}${a}`);
     expect(o.pipe(operators)).toBeObservable(e);
+  });
+
+  it('startWith: default value at the begin', async () => {
+    const o = cold('x-----y-|');
+    const e = cold('(ax)--y-|');
+    const operators = startWith('a');
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+
+  it('defaultIfEmpty: make sure at least one value', async () => {
+    const o = cold('--|');
+    const e = cold('--(a|)');
+    const operators = defaultIfEmpty('a');
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+
+  it('retry', async () => {
+    const o = cold('(xy|)');
+    let d = 0;
+    const m = o.pipe(
+        mergeMap(a => {
+          if (a === 'x' && d++ === 0) {
+            return throwError('Something');
+          }
+          return of(a);
+        }),
+        retry(),
+    );
+    const e = cold('(xy|)');
+    expect(m).toBeObservable(e);
+  });
+
+  it('share 1', async () => {
+    const myShared = of(true).pipe(share());
+    const a = concat(myShared, myShared, cold('------x----y---|'));
+    const b = concat(myShared, cold('------x----y---|'));
+    const e = cold('(aaa)-(xx)-(yy)|', {a: true, x: 'x', y: 'y'});
+    expect(merge(a, b)).toBeObservable(e);
+  });
+
+  it('share: terminate shared pipe with reduce aggregate', async () => {
+    const myShared = of(true).pipe(
+        share(),
+        // this aggregate function will help terminate the share pipe, making
+        // it repeatable for retry.
+        reduce((acc, v) => v),
+    );
+
+    const o = defer(() => myShared)
+        .pipe(
+            // make myShared repeated on purpose to show that reduce() works
+            mergeMap(() => myShared),
+            map(() => 'a'));
+    const e = cold('(a|)');
+    expect(o).toBeObservable(e);
+  });
+
+  it('share: terminate shared pipe with filter', async () => {
+    const myShared = of(true).pipe(
+        share(),
+        stream => concat(stream, of('sentinel')),
+        filter(v => v === 'sentinel'),
+    );
+
+    const o = defer(() => myShared)
+        .pipe(
+            // make myShared repeated on purpose to show that filter() works
+            mergeMap(() => myShared),
+            map(() => 'a'));
+    const e = cold('(a|)');
+    expect(o).toBeObservable(e);
   });
 });
