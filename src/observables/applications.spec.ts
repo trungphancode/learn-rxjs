@@ -39,11 +39,10 @@ describe('Creators Application:', async () => {
     const y = cold('----a|    ');
     const o = x.pipe(
         // wait for y
-        stream => combineLatest(stream, y),
+        stream => combineLatest([stream, y]),
         // only keep x
         map(([x]: ReadonlyArray<string>) => x),
     );
-    // const o = combineLatest(x, y).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('----yz-|');
     expect(o).toBeObservable(e);
   });
