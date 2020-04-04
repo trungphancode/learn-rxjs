@@ -3,7 +3,7 @@
  * @see https://rxmarbles.com
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/observables
  */
-import {cold, getTestScheduler} from 'jasmine-marbles';
+import {cold, getTestScheduler, hot, time} from 'jasmine-marbles';
 import {
   combineLatest,
   concat,
@@ -14,9 +14,10 @@ import {
   of,
   onErrorResumeNext,
   race,
+  timer,
   zip
 } from 'rxjs';
-import {map} from 'rxjs/operators';
+import {map, take} from 'rxjs/operators';
 
 
 describe('of()', () => {
@@ -24,7 +25,7 @@ describe('of()', () => {
     const o = of('x', 'y', 'z');
     const e = cold('(xyz|)');
     expect(o).toBeObservable(e);
-    // OR (but not recommended)
+    // The following syntax (though ugly) helps debugging the expected emissions.
     getTestScheduler().expectObservable(o).toBe('(xyz|)');
   });
 });
@@ -36,6 +37,8 @@ describe('merge()', () => {
     const o = merge(x, y);
     const e = cold('axby-z-|');
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^------!');
+    expect(y).toHaveSubscriptions('^--!');
   });
 });
 
@@ -46,6 +49,8 @@ describe('concat()', () => {
     const o = concat(x, y);
     const e = cold('-a-b--c-d|');
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^----!');
+    expect(y).toHaveSubscriptions('-----^---!');
   });
 });
 
@@ -56,6 +61,8 @@ describe('onErrorResumeNext()', () => {
     const o = onErrorResumeNext(x, y);
     const e = cold('-a-b--c-d|');
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^----!');
+    expect(y).toHaveSubscriptions('-----^---!');
   });
 });
 
@@ -66,13 +73,15 @@ describe('combineLatest()', () => {
     const o = combineLatest([x, y]).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('--ABCD-|', {A: 'xa', B: 'ya', C: 'yb', D: 'zb'});
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^------!');
+    expect(y).toHaveSubscriptions('^----!');
   });
 
   it('should be able to use like operator', () => {
     const x = cold('-x-y-z-|');
     const y = cold('--a-b|    ');
     const o = x.pipe(
-        s => combineLatest([s, y]),
+        stream => combineLatest([stream, y]),
         map(([x, y]) => `${x}${y}`),
     );
     const e = cold('--ABCD-|', {A: 'xa', B: 'ya', C: 'yb', D: 'zb'});
@@ -87,6 +96,8 @@ describe('zip()', () => {
     const o = zip(x, y).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('--A-B|', {A: 'xa', B: 'yb'});
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^----!'); // x is unsubscribed early
+    expect(y).toHaveSubscriptions('^----!');
   });
 
   it('should not terminate until all possible matches are emitted even though one stream is terminated', () => {
@@ -95,6 +106,8 @@ describe('zip()', () => {
     const o = zip(x, y).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('----------A-B-C-|', {A: 'xa', B: 'yb', C: 'zc'});
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^---------------!');
+    expect(y).toHaveSubscriptions('^-------!        ');
   });
 });
 
@@ -107,6 +120,9 @@ describe('forkJoin()', () => {
     const e = cold('--------(A|)', {A: ['c', 'e', 'g']});
     expect(o).toBeObservable(e);
     // Note: x, y, z must be finite for o to emit.
+    expect(x).toHaveSubscriptions('^-------!');
+    expect(y).toHaveSubscriptions('^-----!');
+    expect(z).toHaveSubscriptions('^------!');
   });
 
   it('should emit nothing if one does not emit nothing', () => {
@@ -136,6 +152,9 @@ describe('race()', () => {
     const o = race([x, y, z]);
     const e = cold('-f---g-|  ');
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^!'); // x is unsubscribed early
+    expect(y).toHaveSubscriptions('^!'); // y is unsubscribed early
+    expect(z).toHaveSubscriptions('^------!');
   });
 
   it('should select flow with first event if that event is error', () => {
@@ -145,6 +164,9 @@ describe('race()', () => {
     const o = race(x, y, z);
     const e = cold('-#  ');
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^!'); // x is unsubscribed early
+    expect(y).toHaveSubscriptions('^!'); // y is unsubscribed early
+    expect(z).toHaveSubscriptions('^!');
   });
 
   it('should select flow with first event even if that event is complete', () => {
@@ -154,11 +176,14 @@ describe('race()', () => {
     const o = race(x, y, z);
     const e = cold('-|  ');
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^!'); // x is unsubscribed early
+    expect(y).toHaveSubscriptions('^!'); // y is unsubscribed early
+    expect(z).toHaveSubscriptions('^!');
   });
 });
 
 describe('defer()', () => {
-  it('should only run with subscribed', () => {
+  it('should only run when subscribed', () => {
     let selector: 'x' | 'y' | 'z' = 'x';
     const x = cold('a-b|');
     const y = cold('   c-d|');
@@ -184,5 +209,23 @@ describe('iff()', () => {
     expect(o).toBeObservable(cold('a-b|'));  // equals to x
     selector = 'y';
     expect(o).toBeObservable(cold('---c-d|'));  // equals to y
+  });
+});
+
+describe('timer()', () => {
+  it('should create hot flow with delay', () => {
+    const delay = time('----|');
+    const o = timer(delay, getTestScheduler()).pipe(map(v => `${v}`));
+    const e = hot('----(0|)');
+    expect(o).toBeObservable(e);
+  });
+
+  it('should create hot flow with delay and repeated emissions', () => {
+    const delay = time('----------|'); // 100ms since 10ms per frame
+    const period = time('---|'); // 30ms
+    const o = timer(delay, period, getTestScheduler())
+        .pipe(take(4), map(v => `${v}`));
+    const e = hot('----------0--1--2--(3|)');
+    expect(o).toBeObservable(e);
   });
 });

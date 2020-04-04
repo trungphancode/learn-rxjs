@@ -3,7 +3,7 @@
  * @see https://rxmarbles.com
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/operators
  */
-import {cold} from 'jasmine-marbles';
+import {cold, getTestScheduler, time} from 'jasmine-marbles';
 import {
   concat,
   defer,
@@ -19,7 +19,10 @@ import {
   catchError,
   combineAll,
   concatAll,
-  concatMap, defaultIfEmpty,
+  concatMap,
+  debounceTime,
+  defaultIfEmpty,
+  delay,
   exhaust,
   exhaustMap,
   filter,
@@ -27,19 +30,23 @@ import {
   groupBy,
   map,
   mergeAll,
-  mergeMap, reduce,
-  repeat, retry, share,
+  mergeMap,
+  reduce,
+  repeat,
+  retry,
+  share,
   startWith,
   switchAll,
   switchMap,
   take,
   takeUntil,
   tap,
+  throttleTime,
   zipAll
 } from 'rxjs/operators';
 
 
-describe('map() operator', () => {
+describe('Operator map()', () => {
   it('should provide index for the mapper', () => {
     const o = cold('x-y-z|');
     const e = cold('a-b-c|', {a: '0:x', b: '1:y', c: '2:z'});
@@ -48,7 +55,7 @@ describe('map() operator', () => {
   });
 });
 
-describe('filter() operator', () => {
+describe('Operator filter()', () => {
   it('should accept advanced Type Predicate', () => {
     const o = cold('x-y-z|');
     const e = cold('--y--|');
@@ -57,7 +64,7 @@ describe('filter() operator', () => {
   });
 });
 
-describe('takeUntil() operator', () => {
+describe('Operator takeUntil()', () => {
   it('should stop when the notifier flow emits', () => {
     const o = cold('x-y-z|');
     const n = cold('---s-|');  // notifier emits
@@ -91,7 +98,32 @@ describe('takeUntil() operator', () => {
   });
 });
 
-describe('mergeMap() operator', () => {
+describe('Operator throttleTime()', () => {
+  it('should not change original flow for duration=0', () => {
+    const o = cold('-x-y-z|');
+    const e = cold('-x-y-z|');
+    const operators = throttleTime(0, getTestScheduler());
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+
+  it('should throttle emissions for duration > 0', () => {
+    const o = cold('-x-y-z|');
+    const e = cold('-x---z|');
+    const operators = throttleTime(30, getTestScheduler());
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+});
+
+describe('Operator delay()', () => {
+  it('should delay all emissions', () => {
+    const o = cold('-x--y--z|');
+    const e = cold('--x--y--z|');
+    const operators = delay(time('-|'), getTestScheduler());
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+});
+
+describe('Operator mergeMap()', () => {
   it('mergeMap with array: one becomes many', () => {
     const o = cold('x----y----z---|');
     const e = cold('(xx)-(yy)-(zz)|');
@@ -111,7 +143,7 @@ describe('mergeMap() operator', () => {
   });
 });
 
-describe('concatMap() operator', () => {
+describe('Operator concatMap()', () => {
   it('concatMap with array: one becomes many', () => {
     const o = cold('x----y----z---|');
     const e = cold('(xx)-(yy)-(zz)|');
@@ -131,7 +163,7 @@ describe('concatMap() operator', () => {
   });
 });
 
-describe('switchMap() operator', () => {
+describe('Operator switchMap()', () => {
   /** @see switchAll */
   it('switchMap with observable', () => {
     const o = cold('--x-y----z|     ');
@@ -144,7 +176,7 @@ describe('switchMap() operator', () => {
   });
 });
 
-describe('exhaustMap() operator', () => {
+describe('Operator exhaustMap()', () => {
   /** @see exhaust */
   it('exhaustMap with observable', () => {
     const o = cold('--x-y----z|     ');
@@ -157,7 +189,7 @@ describe('exhaustMap() operator', () => {
   });
 });
 
-describe('Simple operators', () => {
+describe('Operator Simple operators', () => {
   it('tap - catchError - finalize: no error', () => {
     const o = cold('-x-y-|');
     const e = cold('-x-y-|');
@@ -181,7 +213,7 @@ describe('Simple operators', () => {
   });
 });
 
-describe('repeat() operator', () => {
+describe('Operator repeat()', () => {
   it('should concat itself multiple times', () => {
     const o = cold('-x-y-|');
     const e = cold('-x-y--x-y--x-y-|');
@@ -190,7 +222,7 @@ describe('repeat() operator', () => {
   });
 });
 
-describe('concatAll() operator', () => {
+describe('Operator concatAll()', () => {
   it('should concat each observable from a flow of observables', () => {
     const x = cold('  -a---b|            ');  // subscribe after x emit
     const y = cold('        -c---d|      ');  // subscribe after x done
@@ -199,10 +231,13 @@ describe('concatAll() operator', () => {
     const e = cold('---a---b-c---d-e---f|');
     const operators = concatAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('--^-----!');
+    expect(y).toHaveSubscriptions('--------^-----!');
+    expect(z).toHaveSubscriptions('--------------^-----!');
   });
 });
 
-describe('mergeAll() operator', () => {
+describe('Operator mergeAll()', () => {
   it('should merge each observable from a flow of observables', () => {
     const x = cold('  -a---b|       ');  // subscribe after x emit
     const y = cold('    -c---d|     ');  // subscribe after y emit
@@ -211,10 +246,13 @@ describe('mergeAll() operator', () => {
     const e = cold('---a-c-b-de---f|');
     const operators = mergeAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('--^-----!');
+    expect(y).toHaveSubscriptions('----^-----!');
+    expect(z).toHaveSubscriptions('---------^-----!');
   });
 });
 
-describe('switchAll() operator', () => {
+describe('Operator switchAll()', () => {
   /** @see switchMap */
   it('should switch each observable from a flow of observables', () => {
     const x = cold('  -a---b|       ');
@@ -224,10 +262,13 @@ describe('switchAll() operator', () => {
     const e = cold('---a-c----e---f|');
     const operators = switchAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('--^-!'); // x is unsubscribed early
+    expect(y).toHaveSubscriptions('----^----!'); // y is unsubscribed early
+    expect(z).toHaveSubscriptions('---------^-----!');
   });
 });
 
-describe('exhaust() operator', () => {
+describe('Operator exhaust()', () => {
   it('should apply exhaustMap to each observable from a flow of observables', () => {
     const x = cold('  -a---b|       ');
     const y = cold('    -c--d-|     ');  // totally ignored
@@ -236,10 +277,13 @@ describe('exhaust() operator', () => {
     const e = cold('---a---b--e---f|');
     const operators = exhaust();  // equivalent to exhaustMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('--^-----!');
+    // y is not subscribed
+    expect(z).toHaveSubscriptions('---------^-----!');
   });
 });
 
-describe('zipAll() operator', () => {
+describe('Operator zipAll()', () => {
   it('should zip elements from observable from a flow of observables', () => {
     const x = cold('        -m-n--|     ');  // subscribe after o done
     const y = cold('        --a----b--c|');  // subscribe after o done
@@ -250,7 +294,7 @@ describe('zipAll() operator', () => {
   });
 });
 
-describe('combineAll() operator', () => {
+describe('Operator combineAll()', () => {
   it('combineAll: observable of observables', () => {
     const x = cold('       -m-n--|    ');  // subscribe after o done
     const y = cold('       --a--b--c-|');  // subscribe after o done
@@ -261,7 +305,7 @@ describe('combineAll() operator', () => {
   });
 });
 
-describe('startWith() operator', () => {
+describe('Operator startWith()', () => {
   it('should emit its value at the beginning', () => {
     const o = cold('x-----y-|');
     const e = cold('(ax)--y-|');
@@ -270,7 +314,7 @@ describe('startWith() operator', () => {
   });
 });
 
-describe('defaultIfEmpty() operator', () => {
+describe('Operator defaultIfEmpty()', () => {
   it('should emit default value if the original flow completes without emitting', () => {
     const o = cold('--|');
     const e = cold('--(a|)');
@@ -286,7 +330,7 @@ describe('defaultIfEmpty() operator', () => {
   });
 });
 
-describe('retry() operator', () => {
+describe('Operator retry()', () => {
   it('should retry if error encountered', () => {
     const o = cold('(xy|)');
     let d = 0;
@@ -304,7 +348,7 @@ describe('retry() operator', () => {
   });
 });
 
-describe('share() pipe', () => {
+describe('Operator share() pipe', () => {
   it('should be sharable', () => {
     const myShared = of(true).pipe(share());
     const a = concat(myShared, myShared, cold('------x----y---|'));
