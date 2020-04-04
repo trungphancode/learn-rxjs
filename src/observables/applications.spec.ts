@@ -3,25 +3,13 @@
  * @see https://rxmarbles.com
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/observables
  */
-import {cold, getTestScheduler} from 'jasmine-marbles';
-import {
-  combineLatest,
-  concat,
-  defer,
-  forkJoin,
-  from,
-  iif,
-  merge,
-  of,
-  onErrorResumeNext,
-  race,
-  zip
-} from 'rxjs';
-import {map} from 'rxjs/operators';
+import {cold, initTestScheduler, resetTestScheduler} from 'jasmine-marbles';
+import {combineLatest, defer, EMPTY, from, of} from 'rxjs';
+import {concatMap, filter, map, switchMap, takeUntil} from 'rxjs/operators';
 
 
-describe('Creators Application:', async () => {
-  it('defer Promise', async () => {
+describe('Application', () => {
+  it('should turn from(Promise) to cold observable with defer()', () => {
     let nextId = 1;
     // do not use from(...) directly, but defer(() => from(...)) to create
     // a cold observable (i.e. only gen Promise when subscribing)
@@ -34,16 +22,119 @@ describe('Creators Application:', async () => {
     });
   });
 
-  it('combineLatest: as a means to gate', async () => {
+  it('should leverage combineLatest() as a means to gate', async () => {
     const x = cold('-x-y-z-|');
-    const y = cold('----a|    ');
+    const y = cold('----a|'); // y acts as a gate (e.g. wait for something to be initialized)
     const o = x.pipe(
         // wait for y
         stream => combineLatest([stream, y]),
         // only keep x
-        map(([x]: ReadonlyArray<string>) => x),
+        map(([x]) => x),
     );
     const e = cold('----yz-|');
     expect(o).toBeObservable(e);
+    // This idea is the base for waitUtil() operator
+  });
+
+  it('should use filter() to avoid bad concatMap if-empty pattern', () => {
+    {
+      const o = cold('-x-y-z-|');
+      const e = cold('-X---Z-|');
+      const good = o.pipe(
+          filter(v => v !== 'y'),
+          map(v => v.toUpperCase()),
+      );
+      expect(good).toBeObservable(e);
+    }
+    resetTestScheduler();
+    initTestScheduler();
+    {
+      const o = cold('-x-y-z-|');
+      const e = cold('-X---Z-|');
+      const bad = o.pipe(
+          concatMap(v => {
+            if (v === 'y') {
+              return EMPTY;
+            }
+            return of(v.toUpperCase());
+          }),
+      );
+      expect(bad).toBeObservable(e);
+    }
+  });
+
+  /** In general, just place takeUntil() at the end to avoid leaks. */
+  it('should put takeUtil() after combineLatest to avoid leaks', () => {
+    {
+      const x = cold('x-----y|');
+      const y = cold('---a---b---c---|');
+      const n = cold('----s|');
+      const rightCode = x.pipe(
+          stream => combineLatest([stream, y]),
+          takeUntil(n),
+      );
+      const e = cold('---A|', {A: ['x', 'a']});
+      expect(rightCode).toBeObservable(e);
+    }
+    initTestScheduler();
+    {
+      const x = cold('x-----y|');
+      const y = cold('---a---b---c---|');
+      const n = cold('----s|');
+      const wrongFlow = x.pipe(
+          takeUntil(n), // takeUntil is before the combineLatest
+          stream => combineLatest([stream, y]),
+      );
+      // The wrongFlow is not stopped by takeUtil()
+      const e = cold('---A---B---C---|', {
+        A: ['x', 'a'],
+        B: ['x', 'b'],
+        C: ['x', 'c'],
+      });
+      expect(wrongFlow).toBeObservable(e);
+    }
+    initTestScheduler();
+    // The wrongFlow is not stopped by takeUntil() because the above code is
+    // equivalent to:
+    {
+      const flow = combineLatest([
+        cold('x----|'),
+        cold('---a---b---c---|'),
+      ]);
+      expect(flow).toBeObservable(cold('---A---B---C---|', {
+        A: ['x', 'a'],
+        B: ['x', 'b'],
+        C: ['x', 'c'],
+      }));
+    }
+  });
+
+  /** In general, just place takeUntil() at the end to avoid leaks. */
+  it('should put takeUtil() after high-order operators to avoid leaks', () => {
+    {
+      const x = cold('-a-----b|');
+      const y = cold('c---d|');
+      const rightFlow = cold('x--y|')
+          .pipe(
+              switchMap((v: 'x' | 'y') => ({x, y}[v])),
+              takeUntil(cold('--n|')),
+          );
+      const e = cold('-a|');
+      expect(rightFlow).toBeObservable(e);
+    }
+    initTestScheduler();
+    {
+      const x = cold('-a-----b|');
+      const y = cold('c---d|');
+      const wrongFlow = cold('x--y|')
+          .pipe(
+              takeUntil(cold('--n|')), // takeUntil is before switchMap
+              switchMap((v: 'x' | 'y') => ({x, y}[v])),
+          );
+      // y is not subscribed expectedly,
+      // but x is not stopped unexpectedly by takeUntil()
+      const e = cold('-a-----b|');
+      expect(wrongFlow).toBeObservable(e);
+    }
   });
 });

@@ -4,30 +4,18 @@
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/operators
  */
 import {cold, getTestScheduler, time} from 'jasmine-marbles';
-import {
-  concat,
-  defer,
-  merge,
-  MonoTypeOperatorFunction,
-  of,
-  pipe,
-  Subject,
-  throwError,
-  timer
-} from 'rxjs';
+import {concat, merge, of, pipe, throwError} from 'rxjs';
 import {
   catchError,
   combineAll,
   concatAll,
   concatMap,
-  debounceTime,
   defaultIfEmpty,
   delay,
   exhaust,
   exhaustMap,
   filter,
   finalize,
-  groupBy,
   map,
   mergeAll,
   mergeMap,
@@ -38,7 +26,6 @@ import {
   startWith,
   switchAll,
   switchMap,
-  take,
   takeUntil,
   tap,
   throttleTime,
@@ -71,6 +58,7 @@ describe('Operator takeUntil()', () => {
     const e = cold('x-y|  ');
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(o).toHaveSubscriptions('^--!'); // o is unsubscribed early
   });
 
   it('should not stop when the notifier flow complete without emitting', () => {
@@ -87,6 +75,7 @@ describe('Operator takeUntil()', () => {
     const e = cold('x#');
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(o).toHaveSubscriptions('^!'); // o is unsubscribed early
   });
 
   it('should not throw error if the notifier flow emits at least one before throwing error', () => {
@@ -95,6 +84,7 @@ describe('Operator takeUntil()', () => {
     const e = cold('x|');
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(o).toHaveSubscriptions('^!'); // o is unsubscribed early
   });
 });
 

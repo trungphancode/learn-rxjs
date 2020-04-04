@@ -10,16 +10,74 @@ import {
   defer,
   forkJoin,
   iif,
+  interval,
   merge,
+  Observable,
   of,
   onErrorResumeNext,
   race,
+  Subscription,
   timer,
   zip
 } from 'rxjs';
 import {map, take} from 'rxjs/operators';
 import {advanceTime} from "../testing/scheduler";
+import {SubscriptionLoggable} from "rxjs/internal/testing/SubscriptionLoggable";
 
+
+describe('new Observable()', () => {
+  it('should create a cold Observable when activating producer inside the subscription', () => {
+    const producer = cold('-x-y-z|');
+    const o = new Observable<string>(observer => {
+      // This block will run when observer subscribes
+      const subscription: Subscription = producer.subscribe(
+          v => observer.next(v),
+          err => observer.error(err),
+          () => observer.complete(),
+      ); // subscribe to the producer inside this observer's subscription
+      return () => {
+        // cleanup when observer unsubscribe or producer completes or errors
+        subscription.unsubscribe();
+      };
+    });
+    advanceTime('--|');
+    expect(o) // observer 1
+        .toBeObservable(cold('---x-y-z|'));
+    expect(o.pipe(take(2))) // observer 2, unsubscribe early
+        .toBeObservable(cold('---------x-(y|)'));
+    expect(producer).toHaveSubscriptions([
+      '--^-----!---',  // subscribed for observer 1
+      '--------^--!',  // subscribed for observer 2 and unsubscribed early
+    ]);
+  });
+
+  it('should create hot Observable when activating producer outside the subscription', () => {
+    const logger = new SubscriptionLoggable();
+    logger.scheduler = getTestScheduler();
+    const ticks = interval(20, getTestScheduler()); // tick every 20ms
+    // Create a hot observable that emit -0-1-2-3-4
+    const o = new Observable<string>(observer => {
+      const subscription: Subscription = ticks.subscribe(
+          () => observer.next(`${(getTestScheduler().now() - 20)/20}`),
+          err => observer.error(err),
+          () => observer.complete(),
+      );
+      const index = logger.logSubscribedFrame();
+      return () => {
+        logger.logUnsubscribedFrame(index);
+        subscription.unsubscribe();
+      };
+    });
+    expect(o.pipe(take(2))) // observer 1
+        .toBeObservable(hot('--0-(1|)      '));
+    expect(o.pipe(take(3))) // observer 2
+        .toBeObservable(hot('------2-3-(4|)'));
+    getTestScheduler().expectSubscriptions(logger.subscriptions).toBe([
+        '^---!------', // observer 1 subscribes to the producer
+        '----^-----!', // observer 2 subscribes to the producer
+    ]);
+  });
+});
 
 describe('Creation operator of()', () => {
   it('should emit all values at once', () => {
@@ -77,13 +135,13 @@ describe('Creation operator combineLatest()', () => {
   });
 
   it('should be able to use like operator', () => {
-    const x = cold('-x-y-z-|');
-    const y = cold('--a-b|    ');
+    const x = cold('x|');
+    const y = cold('--a-b-c|');
+    const e = cold('--A-B-C|', {A: 'xa', B: 'xb', C: 'xc'});
     const o = x.pipe(
         stream => combineLatest([stream, y]),
         map(([x, y]) => `${x}${y}`),
     );
-    const e = cold('--ABCD-|', {A: 'xa', B: 'ya', C: 'yb', D: 'zb'});
     expect(o).toBeObservable(e);
   });
 });

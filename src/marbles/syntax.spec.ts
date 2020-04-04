@@ -16,7 +16,7 @@ import {timer} from "rxjs";
 
 
 describe('Jasmine-marbles', () => {
-  it('should have 10ms per frame by default', ()  => {
+  it('should have 10ms per frame by default', () => {
     expect(time('-|')).toBe(10);
   });
 
@@ -39,14 +39,16 @@ describe('Jasmine-marbles', () => {
 
   it('should support expecting cold subscription', () => {
     const x = cold('---x-y|');
-    const o = x.pipe(tap(v => {}));
+    const o = x.pipe(tap(v => {
+    }));
     expect(o).toBeObservable(x); // This will subscribe x
     expect(x).toHaveSubscriptions('^-----!');
   });
 
   it('should support expecting hot subscription', () => {
     const x = hot('---x-y|');
-    const o = x.pipe(tap(v => {}));
+    const o = x.pipe(tap(v => {
+    }));
     expect(o).toBeObservable(x); // This will subscribe x
     expect(x).toHaveSubscriptions('^-----!');
   });
@@ -58,7 +60,7 @@ describe('Jasmine-marbles', () => {
 
   it('should support test scheduler for async timer()', () => {
     const o = timer(30, getTestScheduler());
-    const e = cold('30ms (0|)', {'0' : 0});
+    const e = cold('30ms (0|)', {'0': 0});
     expect(o).toBeObservable(e);
   });
 
