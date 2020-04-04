@@ -3,7 +3,7 @@
  * @see https://rxmarbles.com
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/observables
  */
-import {cold, initTestScheduler, resetTestScheduler} from 'jasmine-marbles';
+import {cold, initTestScheduler} from 'jasmine-marbles';
 import {combineLatest, defer, EMPTY, from, of} from 'rxjs';
 import {concatMap, filter, map, switchMap, takeUntil} from 'rxjs/operators';
 
@@ -46,7 +46,6 @@ describe('Application', () => {
       );
       expect(good).toBeObservable(e);
     }
-    resetTestScheduler();
     initTestScheduler();
     {
       const o = cold('-x-y-z-|');
@@ -75,6 +74,8 @@ describe('Application', () => {
       );
       const e = cold('---A|', {A: ['x', 'a']});
       expect(rightCode).toBeObservable(e);
+      expect(x).toHaveSubscriptions('^---!');
+      expect(y).toHaveSubscriptions('^---!'); // y is stopped expectedly
     }
     initTestScheduler();
     {
@@ -92,6 +93,8 @@ describe('Application', () => {
         C: ['x', 'c'],
       });
       expect(wrongFlow).toBeObservable(e);
+      expect(x).toHaveSubscriptions('^---!');
+      expect(y).toHaveSubscriptions('^--------------!'); // y not stopped -> leak
     }
     initTestScheduler();
     // The wrongFlow is not stopped by takeUntil() because the above code is
@@ -121,6 +124,8 @@ describe('Application', () => {
           );
       const e = cold('-a|');
       expect(rightFlow).toBeObservable(e);
+      expect(x).toHaveSubscriptions('^-!'); // x is stopped expectedly
+      expect(y).toHaveSubscriptions([]);
     }
     initTestScheduler();
     {
@@ -131,10 +136,10 @@ describe('Application', () => {
               takeUntil(cold('--n|')), // takeUntil is before switchMap
               switchMap((v: 'x' | 'y') => ({x, y}[v])),
           );
-      // y is not subscribed expectedly,
-      // but x is not stopped unexpectedly by takeUntil()
       const e = cold('-a-----b|');
       expect(wrongFlow).toBeObservable(e);
+      expect(x).toHaveSubscriptions('^-------!'); // x not stopped -> leak
+      expect(y).toHaveSubscriptions([]);
     }
   });
 });

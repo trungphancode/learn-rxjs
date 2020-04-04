@@ -10,9 +10,9 @@ import {
   initTestScheduler,
   resetTestScheduler,
   time
-} from "jasmine-marbles";
-import {delay, tap} from "rxjs/operators";
-import {timer} from "rxjs";
+} from 'jasmine-marbles';
+import {delay, tap} from 'rxjs/operators';
+import {timer} from 'rxjs';
 
 
 describe('Jasmine-marbles', () => {

@@ -1,5 +1,5 @@
-import {combineLatest, MonoTypeOperatorFunction, Observable} from "rxjs";
-import {map, take} from "rxjs/operators";
+import {combineLatest, MonoTypeOperatorFunction, Observable} from 'rxjs';
+import {map, take} from 'rxjs/operators';
 
 /**
  * Waits until each input observable emits at least one. This is different from

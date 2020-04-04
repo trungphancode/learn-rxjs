@@ -55,7 +55,7 @@ describe('new Observable()', () => {
     const logger = new SubscriptionLoggable();
     logger.scheduler = getTestScheduler();
     const ticks = interval(20, getTestScheduler()); // tick every 20ms
-    // Create a hot observable that emit -0-1-2-3-4
+    // Create a hot observable that emit -0-1-2-3-4-5...
     const o = new Observable<string>(observer => {
       const subscription: Subscription = ticks.subscribe(
           () => observer.next(`${(getTestScheduler().now() - 20)/20}`),
@@ -73,8 +73,8 @@ describe('new Observable()', () => {
     expect(o.pipe(take(3))) // observer 2
         .toBeObservable(hot('------2-3-(4|)'));
     getTestScheduler().expectSubscriptions(logger.subscriptions).toBe([
-        '^---!------', // observer 1 subscribes to the producer
-        '----^-----!', // observer 2 subscribes to the producer
+        '^---!------', // observer 1's subscription
+        '----^-----!', // observer 2's subscription
     ]);
   });
 });
@@ -279,19 +279,19 @@ describe('Creation operator iff()', () => {
 });
 
 describe('Creation operator timer()', () => {
-  it('should create hot flow with delay', () => {
+  it('should create flow with delay', () => {
     const delay = time('----|');
     const o = timer(delay, getTestScheduler()).pipe(map(v => `${v}`));
-    const e = hot('----(0|)');
+    const e = cold('----(0|)');
     expect(o).toBeObservable(e);
   });
 
-  it('should create hot flow with delay and repeated emissions', () => {
+  it('should create flow with delay and repeated emissions', () => {
     const delay = time('----------|'); // 100ms since 10ms per frame
     const period = time('---|'); // 30ms
     const o = timer(delay, period, getTestScheduler())
         .pipe(take(6), map(v => `${v}`));
-    const e = hot('----------0--1--2--3--4--(5|)');
+    const e = cold('----------0--1--2--3--4--(5|)');
     expect(o).toBeObservable(e);
   });
 });

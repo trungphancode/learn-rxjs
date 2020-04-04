@@ -191,8 +191,8 @@ describe('Operator exhaustMap()', () => {
   });
 });
 
-describe('Operator Simple operators', () => {
-  it('tap - catchError - finalize: no error', () => {
+describe('Operator tap-catchError-finalize', () => {
+  it('should simulate try-catch blocks', () => {
     const o = cold('-x-y-|');
     const e = cold('-x-y-|');
     const operators = pipe(
@@ -203,7 +203,7 @@ describe('Operator Simple operators', () => {
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
-  it('tap - catchError - finalize: error', () => {
+  it('should simulate try-catch blocks with error', () => {
     const o = cold('-x-y-#');
     const e = cold('-x-y-#');
     const operators = pipe(

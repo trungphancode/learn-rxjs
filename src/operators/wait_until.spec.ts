@@ -1,5 +1,5 @@
-import {cold} from "jasmine-marbles";
-import {waitUntil} from "./wait_until";
+import {cold} from 'jasmine-marbles';
+import {waitUntil} from './wait_until';
 
 describe('Custom operator waitUntil()', () => {
   it('should wait all gating observables to emit', ()  => {
