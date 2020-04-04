@@ -18,19 +18,18 @@ import {
   zip
 } from 'rxjs';
 import {map, take} from 'rxjs/operators';
+import {advanceTime} from "../testing/scheduler";
 
 
-describe('of()', () => {
+describe('Creation operator of()', () => {
   it('should emit all values at once', () => {
     const o = of('x', 'y', 'z');
     const e = cold('(xyz|)');
     expect(o).toBeObservable(e);
-    // The following syntax (though ugly) helps debugging the expected emissions.
-    getTestScheduler().expectObservable(o).toBe('(xyz|)');
   });
 });
 
-describe('merge()', () => {
+describe('Creation operator merge()', () => {
   it('should emit both observables in parallel', () => {
     const x = cold('-x-y-z-|');
     const y = cold('a-b|    ');
@@ -42,8 +41,8 @@ describe('merge()', () => {
   });
 });
 
-describe('concat()', () => {
-  it('should finish one flow before starting the other', () => {
+describe('Creation operator concat()', () => {
+  it('should finish one flow before starting another', () => {
     const x = cold('-a-b-|    ');  // must be finite for y to subscribe
     const y = cold('     -c-d|');
     const o = concat(x, y);
@@ -54,7 +53,7 @@ describe('concat()', () => {
   });
 });
 
-describe('onErrorResumeNext()', () => {
+describe('Creation operator onErrorResumeNext()', () => {
   it('should continue with next flow without error', () => {
     const x = cold('-a-b-#    ');  // must be finite for y to subscribe
     const y = cold('     -c-d#');
@@ -66,7 +65,7 @@ describe('onErrorResumeNext()', () => {
   });
 });
 
-describe('combineLatest()', () => {
+describe('Creation operator combineLatest()', () => {
   it('should wait until each flow emits at least once and finish when all flows finish', () => {
     const x = cold('-x-y-z-|');
     const y = cold('--a-b|    ');
@@ -89,7 +88,7 @@ describe('combineLatest()', () => {
   });
 });
 
-describe('zip()', () => {
+describe('Creation operator zip()', () => {
   it('should match each element from one flow to the corresponding element in the other flow', () => {
     const x = cold('-x-y-z-|');
     const y = cold('--a-b|  ');
@@ -111,7 +110,7 @@ describe('zip()', () => {
   });
 });
 
-describe('forkJoin()', () => {
+describe('Creation operator forkJoin()', () => {
   it('should wait till all done', () => {
     const x = cold('-a-b-c--|   ');
     const y = cold('--d-e-|     ');
@@ -144,7 +143,7 @@ describe('forkJoin()', () => {
   });
 });
 
-describe('race()', () => {
+describe('Creation operator race()', () => {
   it('should select flow that emits first', () => {
     const x = cold('--a-b-c--|');
     const y = cold('--d-e#    ');
@@ -182,23 +181,30 @@ describe('race()', () => {
   });
 });
 
-describe('defer()', () => {
+describe('Creation operator defer()', () => {
   it('should only run when subscribed', () => {
-    let selector: 'x' | 'y' | 'z' = 'x';
+    const x = cold('x-y|');
+    const o = defer(() => x);
+    advanceTime('--|');
+    expect(o).toBeObservable(cold('--x-y|'));
+    expect(x).toHaveSubscriptions('--^--!');
+  });
+
+  it('should be able to simulate iff() operator', () => {
+    let selector: 'x' | 'y' = 'x';
     const x = cold('a-b|');
     const y = cold('   c-d|');
-    const z = cold('      e-f|');
-    const o = defer(() => ({x, y, z}[selector]));
+    const o = defer(() => ({x, y}[selector]));
     selector = 'x';
     expect(o).toBeObservable(cold('a-b|'));  // equals to x
+    expect(x).toHaveSubscriptions('^--!');
     selector = 'y';
     expect(o).toBeObservable(cold('---c-d|'));  // equals to y
-    selector = 'z';
-    expect(o).toBeObservable(cold('------e-f|'));  // equals to z
+    expect(y).toHaveSubscriptions('---^--!');
   });
 });
 
-describe('iff()', () => {
+describe('Creation operator iff()', () => {
   /** @see defer : iff functionality can be achieved with defer. */
   it('should select flow based on condition at subscription time', () => {
     let selector: 'x' | 'y' = 'x';
@@ -207,12 +213,14 @@ describe('iff()', () => {
     const o = iif(() => selector === 'x', x, y);
     selector = 'x';
     expect(o).toBeObservable(cold('a-b|'));  // equals to x
+    expect(x).toHaveSubscriptions('^--!');
     selector = 'y';
     expect(o).toBeObservable(cold('---c-d|'));  // equals to y
+    expect(y).toHaveSubscriptions('---^--!');
   });
 });
 
-describe('timer()', () => {
+describe('Creation operator timer()', () => {
   it('should create hot flow with delay', () => {
     const delay = time('----|');
     const o = timer(delay, getTestScheduler()).pipe(map(v => `${v}`));
@@ -224,8 +232,8 @@ describe('timer()', () => {
     const delay = time('----------|'); // 100ms since 10ms per frame
     const period = time('---|'); // 30ms
     const o = timer(delay, period, getTestScheduler())
-        .pipe(take(4), map(v => `${v}`));
-    const e = hot('----------0--1--2--(3|)');
+        .pipe(take(6), map(v => `${v}`));
+    const e = hot('----------0--1--2--3--4--(5|)');
     expect(o).toBeObservable(e);
   });
 });

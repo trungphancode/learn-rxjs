@@ -109,7 +109,7 @@ describe('Operator throttleTime()', () => {
   it('should throttle emissions for duration > 0', () => {
     const o = cold('-x-y-z|');
     const e = cold('-x---z|');
-    const operators = throttleTime(30, getTestScheduler());
+    const operators = throttleTime(time('---|'), getTestScheduler());
     expect(o.pipe(operators)).toBeObservable(e);
   });
 });
@@ -124,15 +124,15 @@ describe('Operator delay()', () => {
 });
 
 describe('Operator mergeMap()', () => {
-  it('mergeMap with array: one becomes many', () => {
+  it('should support array', () => {
     const o = cold('x----y----z---|');
     const e = cold('(xx)-(yy)-(zz)|');
-    const operators = mergeMap((v) => [v, v]);
+    const operators = mergeMap(v => [v, v]);
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
   /** @see mergeAll */
-  it('mergeMap with observable', () => {
+  it('should merge higher-order observables', () => {
     const o = cold('x-y----z|     ');
     const x = cold('-a---b|       ');
     const y = cold('  -c---d|     ');
@@ -140,11 +140,14 @@ describe('Operator mergeMap()', () => {
     const e = cold('-a-c-b-de---f|');
     const operators = mergeMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('^-----!       ');
+    expect(y).toHaveSubscriptions('--^-----!     ');
+    expect(z).toHaveSubscriptions('-------^-----!');
   });
 });
 
 describe('Operator concatMap()', () => {
-  it('concatMap with array: one becomes many', () => {
+  it('should support array', () => {
     const o = cold('x----y----z---|');
     const e = cold('(xx)-(yy)-(zz)|');
     const operators = concatMap((v) => [v, v]);
@@ -152,7 +155,7 @@ describe('Operator concatMap()', () => {
   });
 
   /** @see concatAll */
-  it('concatMap with observable', () => {
+  it('should concat higher-order observables', () => {
     const o = cold('--x-y----z|          ');
     const x = cold('  -a---b|            ');
     const y = cold('        -c---d|      ');  // subscribe after x done
@@ -160,12 +163,15 @@ describe('Operator concatMap()', () => {
     const e = cold('---a---b-c---d-e---f|');
     const operators = concatMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('--^-----!');
+    expect(y).toHaveSubscriptions('--------^-----!');
+    expect(z).toHaveSubscriptions('--------------^-----!');
   });
 });
 
 describe('Operator switchMap()', () => {
   /** @see switchAll */
-  it('switchMap with observable', () => {
+  it('should switch to high-order observable and unsubscribe the previous one', () => {
     const o = cold('--x-y----z|     ');
     const x = cold('  -a---b|       ');
     const y = cold('    -c---d|     ');
@@ -173,12 +179,15 @@ describe('Operator switchMap()', () => {
     const e = cold('---a-c----e---f|');
     const operators = switchMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('--^-!'); // x is unsubscribed earlier
+    expect(y).toHaveSubscriptions('----^----!'); // y is unsubscribed earlier
+    expect(z).toHaveSubscriptions('---------^-----!');
   });
 });
 
 describe('Operator exhaustMap()', () => {
   /** @see exhaust */
-  it('exhaustMap with observable', () => {
+  it('should continue with higher-order observable only if previous one is completed', () => {
     const o = cold('--x-y----z|     ');
     const x = cold('  -a---b|       ');
     const y = cold('    -c---d|     ');
@@ -186,6 +195,9 @@ describe('Operator exhaustMap()', () => {
     const e = cold('---a---b--e---f|');
     const operators = exhaustMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions('--^-----!       ');
+    expect(y).toHaveSubscriptions([]); // y is ignored, not subscribed
+    expect(z).toHaveSubscriptions('---------^-----!');
   });
 });
 
@@ -278,7 +290,7 @@ describe('Operator exhaust()', () => {
     const operators = exhaust();  // equivalent to exhaustMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions('--^-----!');
-    // y is not subscribed
+    expect(y).toHaveSubscriptions([]); // y is ignored, not subscribed
     expect(z).toHaveSubscriptions('---------^-----!');
   });
 });
@@ -331,7 +343,7 @@ describe('Operator defaultIfEmpty()', () => {
 });
 
 describe('Operator retry()', () => {
-  it('should retry if error encountered', () => {
+  it('should retry only if error encountered', () => {
     const o = cold('(xy|)');
     let d = 0;
     const m = o.pipe(
