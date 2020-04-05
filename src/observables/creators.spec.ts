@@ -15,14 +15,20 @@ import {
   Observable,
   of,
   onErrorResumeNext,
+  pipe,
   race,
   Subscription,
   timer,
   zip
 } from 'rxjs';
-import {map, take} from 'rxjs/operators';
+import {filter, map, take} from 'rxjs/operators';
 import {advanceTime} from "../testing/scheduler";
 import {SubscriptionLoggable} from "rxjs/internal/testing/SubscriptionLoggable";
+import {
+  ObservableInput,
+  SubscribableOrPromise,
+  UnaryFunction
+} from "rxjs/src/internal/types";
 
 
 describe('new Observable()', () => {
@@ -300,8 +306,8 @@ describe('Creation operator defer()', () => {
   });
 });
 
-describe('Creation operator iff()', () => {
-  /** @see defer : iff functionality can be achieved with defer. */
+describe('Creation operator iif()', () => {
+  /** @see defer : iif functionality can be achieved with defer. */
   it('should select flow based on condition at subscription time', () => {
     let selector: 'x' | 'y' = 'x';
     const x = cold('a-b|');
@@ -314,6 +320,32 @@ describe('Creation operator iff()', () => {
     expect(o).toBeObservable(cold('---c-d|'));  // equals to y
     expect(y).toHaveSubscriptions('---^--!');
   });
+
+  for (const externalCondition of [false, true]) {
+    /** @see custom operator pipeIf() */
+    it(`should support conditional pipe % externalCondition=${externalCondition}`, () => {
+      let condition = false;
+      const x = cold('X-y-z|');
+      const o = x.pipe(
+          stream => iif(() => condition,
+              pipe(
+                  filter((v: string) => v !== 'y'),
+                  map(v => v.toUpperCase()),
+              )(stream),
+              pipe(
+                  filter((v: string) => v !== 'z'),
+                  map(v => v.toLowerCase()),
+              )(stream)),
+      );
+      // Change condition before subscription
+      condition = externalCondition;
+      if (externalCondition) {
+        expect(o).toBeObservable(cold('X---Z|'));
+      } else {
+        expect(o).toBeObservable(cold('x-y--|'));
+      }
+    });
+  }
 });
 
 describe('Creation operator timer()', () => {
