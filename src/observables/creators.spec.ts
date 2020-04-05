@@ -58,7 +58,7 @@ describe('new Observable()', () => {
     // Create a hot observable that emit -0-1-2-3-4-5...
     const o = new Observable<string>(observer => {
       const subscription: Subscription = ticks.subscribe(
-          () => observer.next(`${(getTestScheduler().now() - 20)/20}`),
+          () => observer.next(`${(getTestScheduler().now() - 20) / 20}`),
           err => observer.error(err),
           () => observer.complete(),
       );
@@ -73,8 +73,8 @@ describe('new Observable()', () => {
     expect(o.pipe(take(3))) // observer 2
         .toBeObservable(hot('------2-3-(4|)'));
     getTestScheduler().expectSubscriptions(logger.subscriptions).toBe([
-        '^---!------', // observer 1's subscription
-        '----^-----!', // observer 2's subscription
+      '^---!------', // observer 1's subscription
+      '----^-----!', // observer 2's subscription
     ]);
   });
 });
@@ -203,7 +203,13 @@ describe('Creation operator forkJoin()', () => {
     const z = cold('-f---g-| ');
     const o = forkJoin([x, y, z]);
     const e = cold('---|     ');
+    const xSubs = ('^--!     ');
+    const ySubs = ('^--!     '); // y unsubscribed early
+    const zSubs = ('^--!     '); // z unsubscribed early
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 
   it('should throw error if one throws error', () => {
@@ -212,7 +218,13 @@ describe('Creation operator forkJoin()', () => {
     const z = cold('-f---g-| ');
     const o = forkJoin([x, y, z]);
     const e = cold('-----#   ');
+    const xSubs = ('^----!   ');
+    const ySubs = ('^----!   '); // y unsubscribed early
+    const zSubs = ('^----!   '); // z unsubscribed early
     expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
