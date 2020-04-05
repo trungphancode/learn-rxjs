@@ -57,35 +57,40 @@ describe('Operator takeUntil()', () => {
     const o = cold('x-y-z|');
     const n = cold('---s-|');  // notifier emits
     const e = cold('x-y|  ');
+    const oSubs = ('^--!  '); // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(o).toHaveSubscriptions('^--!'); // o is unsubscribed early
+    expect(o).toHaveSubscriptions(oSubs);
   });
 
   it('should not stop when the notifier flow complete without emitting', () => {
     const o = cold('x-y-z|');
     const n = cold('-|    ');  // notifier does not emit
     const e = cold('x-y-z|');
+    const oSubs = ('^----!');
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(o).toHaveSubscriptions(oSubs);
   });
 
   it('should error when the notifier flow throws error without emitting', () => {
     const o = cold('x-y-z|');
     const n = cold('-#    ');  // notifier throws error
     const e = cold('x#');
+    const oSubs = ('^!  '); // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(o).toHaveSubscriptions('^!'); // o is unsubscribed early
+    expect(o).toHaveSubscriptions(oSubs);
   });
 
   it('should not throw error if the notifier flow emits at least one before throwing error', () => {
     const o = cold('x-y-z|');
     const n = cold('-s-#    ');  // notifier emits then throws error
     const e = cold('x|');
+    const oSubs = ('^!  '); // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(o).toHaveSubscriptions('^!'); // o is unsubscribed early
+    expect(o).toHaveSubscriptions(oSubs);
   });
 });
 
@@ -100,17 +105,20 @@ describe('Operator throttleTime()', () => {
   it('should throttle emissions for duration > 0', () => {
     const o = cold('-x-y-z|');
     const e = cold('-x---z|');
-    const operators = throttleTime(time('---|'), getTestScheduler());
+    const t = time(' ---| ');
+    const operators = throttleTime(t, getTestScheduler());
     expect(o.pipe(operators)).toBeObservable(e);
   });
 });
 
 describe('Operator delay()', () => {
   it('should delay all emissions', () => {
-    const o = cold('-x--y--z|');
+    const o = cold('-x--y--z| ');
     const e = cold('--x--y--z|');
+    const oSubs = ('^-------! ');
     const operators = delay(time('-|'), getTestScheduler());
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(o).toHaveSubscriptions(oSubs);
   });
 });
 
@@ -129,11 +137,14 @@ describe('Operator mergeMap()', () => {
     const y = cold('  -c---d|     ');
     const z = cold('       -e---f|');
     const e = cold('-a-c-b-de---f|');
+    const xSubs = ('^-----!       ');
+    const ySubs = ('--^-----!     ');
+    const zSubs = ('-------^-----!');
     const operators = mergeMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^-----!       ');
-    expect(y).toHaveSubscriptions('--^-----!     ');
-    expect(z).toHaveSubscriptions('-------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
@@ -152,11 +163,14 @@ describe('Operator concatMap()', () => {
     const y = cold('        -c---d|      ');  // subscribe after x done
     const z = cold('              -e---f|');  // subscribe after y done
     const e = cold('---a---b-c---d-e---f|');
+    const xSubs = ('--^-----!            ');
+    const ySubs = ('--------^-----!      ');
+    const zSubs = ('--------------^-----!');
     const operators = concatMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('--^-----!');
-    expect(y).toHaveSubscriptions('--------^-----!');
-    expect(z).toHaveSubscriptions('--------------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
@@ -168,11 +182,14 @@ describe('Operator switchMap()', () => {
     const y = cold('    -c---d|     ');
     const z = cold('         -e---f|');
     const e = cold('---a-c----e---f|');
+    const xSubs = ('--^-!           '); // x is unsubscribed earlier
+    const ySubs = ('----^----!      '); // y is unsubscribed earlier
+    const zSubs = ('---------^-----!');
     const operators = switchMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('--^-!'); // x is unsubscribed earlier
-    expect(y).toHaveSubscriptions('----^----!'); // y is unsubscribed earlier
-    expect(z).toHaveSubscriptions('---------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
@@ -184,11 +201,14 @@ describe('Operator exhaustMap()', () => {
     const y = cold('    -c---d|     ');
     const z = cold('         -e---f|');
     const e = cold('---a---b--e---f|');
+    const xSubs = ('--^-----!       ');
+    const ySubs = [] as string[]; // y is ignored, not subscribed
+    const zSubs = ('---------^-----!');
     const operators = exhaustMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('--^-----!       ');
-    expect(y).toHaveSubscriptions([]); // y is ignored, not subscribed
-    expect(z).toHaveSubscriptions('---------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
@@ -227,16 +247,19 @@ describe('Operator repeat()', () => {
 
 describe('Operator concatAll()', () => {
   it('should concat each observable from a flow of observables', () => {
-    const x = cold('  -a---b|            ');  // subscribe after x emit
-    const y = cold('        -c---d|      ');  // subscribe after x done
-    const z = cold('              -e---f|');  // subscribe after y done
-    const o = cold('--x-y----z|          ', {x, y, z});
-    const e = cold('---a---b-c---d-e---f|');
+    const x = cold('  -a---b|              ');
+    const y = cold('        -c---d|        ');
+    const z = cold('                -e---f|');
+    const o = cold('--x-y-----------z|   ', {x, y, z});
+    const e = cold('---a---b-c---d---e---f|');
+    const xSubs = ('--^-----!              '); // subscribe after x emit
+    const ySubs = ('--------^-----!        '); // subscribe after x done
+    const zSubs = ('----------------^-----!'); // subscribe after y done
     const operators = concatAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('--^-----!');
-    expect(y).toHaveSubscriptions('--------^-----!');
-    expect(z).toHaveSubscriptions('--------------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
@@ -247,11 +270,14 @@ describe('Operator mergeAll()', () => {
     const z = cold('         -e---f|');  // subscribe after z emit
     const o = cold('--x-y----z|     ', {x, y, z});
     const e = cold('---a-c-b-de---f|');
+    const xSubs = ('--^-----!       ');
+    const ySubs = ('----^-----!     ');
+    const zSubs = ('---------^-----!');
     const operators = mergeAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('--^-----!');
-    expect(y).toHaveSubscriptions('----^-----!');
-    expect(z).toHaveSubscriptions('---------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
@@ -263,48 +289,62 @@ describe('Operator switchAll()', () => {
     const z = cold('         -e---f|');
     const o = cold('--x-y----z|     ', {x, y, z});
     const e = cold('---a-c----e---f|');
+    const xSubs = ('--^-!           '); // x is unsubscribed early
+    const ySubs = ('----^----!      '); // y is unsubscribed early
+    const zSubs = ('---------^-----!');
     const operators = switchAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('--^-!'); // x is unsubscribed early
-    expect(y).toHaveSubscriptions('----^----!'); // y is unsubscribed early
-    expect(z).toHaveSubscriptions('---------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
 describe('Operator exhaust()', () => {
   it('should apply exhaustMap to each observable from a flow of observables', () => {
     const x = cold('  -a---b|       ');
-    const y = cold('    -c--d-|     ');  // totally ignored
+    const y = cold('    -c--d-|     ');
     const z = cold('         -e---f|');
     const o = cold('--x-y----z|     ', {x, y, z});
     const e = cold('---a---b--e---f|');
+    const xSubs = ('--^-----!       ');
+    const ySubs = [] as string[]; // y is ignored, not subscribed
+    const zSubs = ('---------^-----!');
     const operators = exhaust();  // equivalent to exhaustMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
-    expect(x).toHaveSubscriptions('--^-----!');
-    expect(y).toHaveSubscriptions([]); // y is ignored, not subscribed
-    expect(z).toHaveSubscriptions('---------^-----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
 describe('Operator zipAll()', () => {
   it('should zip elements from observable from a flow of observables', () => {
-    const x = cold('        -m-n--|     ');  // subscribe after o done
-    const y = cold('        --a----b--c|');  // subscribe after o done
+    const x = cold('        -m-n--|     ');
+    const y = cold('        --a----b--c|');
     const o = cold('---xy---|           ', {x, y});
     const e = cold('----------A----(B|) ', {A: 'ma', B: 'nb'});
+    const xSubs = ('--------^-----!     '); // both (x,y) subscribed after o done
+    const ySubs = ('--------^------!    '); // y unsubscribed early since x done
     const operators = zipAll((m, a) => `${m}${a}`);
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 });
 
 describe('Operator combineAll()', () => {
   it('combineAll: observable of observables', () => {
-    const x = cold('       -m-n--|    ');  // subscribe after o done
-    const y = cold('       --a--b--c-|');  // subscribe after o done
+    const x = cold('       -m-n--|    ');
+    const y = cold('       --a--b--c-|');
     const o = cold('--xy---|          ', {x, y});
     const e = cold('---------AB-C--D-|', {A: 'ma', B: 'na', C: 'nb', D: 'nc'});
+    const xSubs = ('-------^-----!    ');  // x subscribed after o done
+    const ySubs = ('-------^---------!');  // y subscribed after o done
     const operators = combineAll((m, a) => `${m}${a}`);
     expect(o.pipe(operators)).toBeObservable(e);
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 });
 

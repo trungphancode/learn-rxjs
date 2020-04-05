@@ -93,9 +93,11 @@ describe('Creation operator merge()', () => {
     const y = cold('a-b|    ');
     const o = merge(x, y);
     const e = cold('axby-z-|');
+    const xSubs = ('^------!');
+    const ySubs = ('^--!    ');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^------!');
-    expect(y).toHaveSubscriptions('^--!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 });
 
@@ -105,9 +107,11 @@ describe('Creation operator concat()', () => {
     const y = cold('     -c-d|');
     const o = concat(x, y);
     const e = cold('-a-b--c-d|');
+    const xSubs = ('^----!    ');
+    const ySubs = ('-----^---!');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^----!');
-    expect(y).toHaveSubscriptions('-----^---!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 });
 
@@ -117,9 +121,11 @@ describe('Creation operator onErrorResumeNext()', () => {
     const y = cold('     -c-d#');
     const o = onErrorResumeNext(x, y);
     const e = cold('-a-b--c-d|');
+    const xSubs = ('^----!    ');
+    const ySubs = ('-----^---!');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^----!');
-    expect(y).toHaveSubscriptions('-----^---!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 });
 
@@ -129,9 +135,11 @@ describe('Creation operator combineLatest()', () => {
     const y = cold('--a-b|    ');
     const o = combineLatest([x, y]).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('--ABCD-|', {A: 'xa', B: 'ya', C: 'yb', D: 'zb'});
+    const xSubs = ('^------!');
+    const ySubs = ('^----!  ');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^------!');
-    expect(y).toHaveSubscriptions('^----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 
   it('should be able to use like operator', () => {
@@ -150,11 +158,13 @@ describe('Creation operator zip()', () => {
   it('should match each element from one flow to the corresponding element in the other flow', () => {
     const x = cold('-x-y-z-|');
     const y = cold('--a-b|  ');
-    const o = zip(x, y).pipe(map(([x, y]) => `${x}${y}`));
-    const e = cold('--A-B|', {A: 'xa', B: 'yb'});
+    const o = zip(x, y);
+    const e = cold('--A-B|  ', {A: ['x', 'a'], B: ['y', 'b']});
+    const xSubs = ('^----!  '); // x is unsubscribed early
+    const ySubs = ('^----!  ');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^----!'); // x is unsubscribed early
-    expect(y).toHaveSubscriptions('^----!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 
   it('should not terminate until all possible matches are emitted even though one stream is terminated', () => {
@@ -162,9 +172,11 @@ describe('Creation operator zip()', () => {
     const y = cold('--abcdef|        ');
     const o = zip(x, y).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('----------A-B-C-|', {A: 'xa', B: 'yb', C: 'zc'});
+    const xSubs = ('^---------------!');
+    const ySubs = ('^-------!        ');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^---------------!');
-    expect(y).toHaveSubscriptions('^-------!        ');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
   });
 });
 
@@ -175,11 +187,14 @@ describe('Creation operator forkJoin()', () => {
     const z = cold('-f---g-|    ');
     const o = forkJoin([x, y, z]);
     const e = cold('--------(A|)', {A: ['c', 'e', 'g']});
+    const xSubs = ('^-------!   ');
+    const ySubs = ('^-----!     ');
+    const zSubs = ('^------!    ');
     expect(o).toBeObservable(e);
     // Note: x, y, z must be finite for o to emit.
-    expect(x).toHaveSubscriptions('^-------!');
-    expect(y).toHaveSubscriptions('^-----!');
-    expect(z).toHaveSubscriptions('^------!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 
   it('should emit nothing if one does not emit nothing', () => {
@@ -208,44 +223,55 @@ describe('Creation operator race()', () => {
     const z = cold('-f---g-|  ');
     const o = race([x, y, z]);
     const e = cold('-f---g-|  ');
+    const xSubs = ('^!        '); // x is unsubscribed early
+    const ySubs = ('^!        '); // y is unsubscribed early
+    const zSubs = ('^------!  ');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^!'); // x is unsubscribed early
-    expect(y).toHaveSubscriptions('^!'); // y is unsubscribed early
-    expect(z).toHaveSubscriptions('^------!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 
   it('should select flow with first event if that event is error', () => {
     const x = cold('--a-b-c--|');
     const y = cold('--d-e#    ');
-    const z = cold('-#  ');
+    const z = cold('-#        ');
     const o = race(x, y, z);
-    const e = cold('-#  ');
+    const e = cold('-#        ');
+    const xSubs = ('^!        '); // x is unsubscribed early
+    const ySubs = ('^!        '); // y is unsubscribed early
+    const zSubs = ('^!        ');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^!'); // x is unsubscribed early
-    expect(y).toHaveSubscriptions('^!'); // y is unsubscribed early
-    expect(z).toHaveSubscriptions('^!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 
   it('should select flow with first event even if that event is complete', () => {
     const x = cold('--a-b-c--|');
     const y = cold('--d-e#    ');
-    const z = cold('-|  ');
+    const z = cold('-|        ');
     const o = race(x, y, z);
-    const e = cold('-|  ');
+    const e = cold('-|        ');
+    const xSubs = ('^!        '); // x is unsubscribed early
+    const ySubs = ('^!        '); // y is unsubscribed early
+    const zSubs = ('^!        ');
     expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions('^!'); // x is unsubscribed early
-    expect(y).toHaveSubscriptions('^!'); // y is unsubscribed early
-    expect(z).toHaveSubscriptions('^!');
+    expect(x).toHaveSubscriptions(xSubs);
+    expect(y).toHaveSubscriptions(ySubs);
+    expect(z).toHaveSubscriptions(zSubs);
   });
 });
 
 describe('Creation operator defer()', () => {
   it('should only run when subscribed', () => {
-    const x = cold('x-y|');
+    const x = cold('  x-y|');
     const o = defer(() => x);
+    const e = cold('--x-y|');
+    const xSubs = ('--^--!');
     advanceTime('--|');
-    expect(o).toBeObservable(cold('--x-y|'));
-    expect(x).toHaveSubscriptions('--^--!');
+    expect(o).toBeObservable(e);
+    expect(x).toHaveSubscriptions(xSubs);
   });
 
   it('should be able to simulate iff() operator', () => {

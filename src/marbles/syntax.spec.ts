@@ -13,11 +13,35 @@ import {
 } from 'jasmine-marbles';
 import {delay, tap} from 'rxjs/operators';
 import {timer} from 'rxjs';
+import {SubscriptionLog} from "rxjs/internal/testing/SubscriptionLog";
 
 
 describe('Jasmine-marbles', () => {
   it('should have 10ms per frame by default', () => {
     expect(time('-|')).toBe(10);
+  });
+
+  it('should ignore spaces around marbles in time()', () => {
+    expect(time('  --| ')).toBe(time('--|'));
+  });
+
+  it('should ignore spaces around marbles in cold()', () => {
+    expect(cold('  -x-y-| ')).toBeObservable(cold('-x-y-|'));
+  });
+
+  it('should ignore spaces around marbles in hot()', () => {
+    expect(hot('  -x-y-| ')).toBeObservable(hot('-x-y-|'));
+  });
+
+  /** This may be a bug. */
+  it('should NOT ignore spaces in subscription marbles', () => {
+    const t1 = time('---|     '); // subscribedFrame
+    const t2 = time('------|  '); // unsubscribedFrame
+    const eSubs1 = ('---^--! '); // expected subscription marbles
+    const eSubs2 = ('   ^--! '); // expected subscription marbles with spaces
+    const subscriptionLog = new SubscriptionLog(t1, t2);
+    getTestScheduler().expectSubscriptions([subscriptionLog]).toBe(eSubs1);
+    getTestScheduler().expectSubscriptions([subscriptionLog]).toBe(eSubs2);
   });
 
   it('should support time progression syntax for cold', () => {

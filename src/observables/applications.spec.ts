@@ -65,23 +65,27 @@ describe('Application', () => {
   /** In general, just place takeUntil() at the end to avoid leaks. */
   it('should put takeUtil() after combineLatest to avoid leaks', () => {
     {
-      const x = cold('x-----y|');
+      const x = cold('x-----y|        ');
       const y = cold('---a---b---c---|');
-      const n = cold('----s|');
-      const rightCode = x.pipe(
+      const n = cold('----s|          '); // notifier signals STOP
+      const e = cold('---A|           ', {A: ['x', 'a']});
+      const xSubs = ('^---!           ');
+      const ySubs = ('^---!           '); // y is stopped expectedly
+      const rightFlow = x.pipe(
           stream => combineLatest([stream, y]),
           takeUntil(n),
       );
-      const e = cold('---A|', {A: ['x', 'a']});
-      expect(rightCode).toBeObservable(e);
-      expect(x).toHaveSubscriptions('^---!');
-      expect(y).toHaveSubscriptions('^---!'); // y is stopped expectedly
+      expect(rightFlow).toBeObservable(e);
+      expect(x).toHaveSubscriptions(xSubs);
+      expect(y).toHaveSubscriptions(ySubs); // y is stopped expectedly
     }
     initTestScheduler();
     {
-      const x = cold('x-----y|');
+      const x = cold('x-----y|        ');
       const y = cold('---a---b---c---|');
-      const n = cold('----s|');
+      const n = cold('----s|          '); // notifier signals STOP
+      const xSubs = ('^---!           ');
+      const ySubs = ('^--------------!'); // y not stopped -> leak
       const wrongFlow = x.pipe(
           takeUntil(n), // takeUntil is before the combineLatest
           stream => combineLatest([stream, y]),
@@ -93,8 +97,8 @@ describe('Application', () => {
         C: ['x', 'c'],
       });
       expect(wrongFlow).toBeObservable(e);
-      expect(x).toHaveSubscriptions('^---!');
-      expect(y).toHaveSubscriptions('^--------------!'); // y not stopped -> leak
+      expect(x).toHaveSubscriptions(xSubs);
+      expect(y).toHaveSubscriptions(ySubs);
     }
     initTestScheduler();
     // The wrongFlow is not stopped by takeUntil() because the above code is
@@ -116,30 +120,36 @@ describe('Application', () => {
   it('should put takeUtil() after high-order operators to avoid leaks', () => {
     {
       const x = cold('-a-----b|');
-      const y = cold('c---d|');
-      const rightFlow = cold('x--y|')
-          .pipe(
-              switchMap((v: 'x' | 'y') => ({x, y}[v])),
-              takeUntil(cold('--n|')),
-          );
-      const e = cold('-a|');
+      const y = cold('c---d|   ');
+      const o = cold('x--y|    ');
+      const n = cold('--n|     '); // notifier signals STOP before y is emitted
+      const e = cold('-a|      ');
+      const xSubs = ('^-!      '); // x is stopped expectedly
+      const ySubs = [] as string[];
+      const rightFlow = o.pipe(
+          switchMap((v: 'x' | 'y') => ({x, y}[v])),
+          takeUntil(n),
+      );
       expect(rightFlow).toBeObservable(e);
-      expect(x).toHaveSubscriptions('^-!'); // x is stopped expectedly
-      expect(y).toHaveSubscriptions([]);
+      expect(x).toHaveSubscriptions(xSubs);
+      expect(y).toHaveSubscriptions(ySubs);
     }
     initTestScheduler();
     {
       const x = cold('-a-----b|');
-      const y = cold('c---d|');
-      const wrongFlow = cold('x--y|')
-          .pipe(
-              takeUntil(cold('--n|')), // takeUntil is before switchMap
-              switchMap((v: 'x' | 'y') => ({x, y}[v])),
-          );
-      const e = cold('-a-----b|');
+      const y = cold('c---d|   ');
+      const o = cold('x--y|    ');
+      const n = cold('--n|     '); // notifier signals STOP before y is emitted
+      const e = cold('-a-----b|'); // wrong expected result
+      const xSubs = ('^-------!'); // x not stopped -> leak
+      const ySubs = [] as string[];
+      const wrongFlow = o.pipe(
+          takeUntil(n), // takeUntil is before switchMap
+          switchMap((v: 'x' | 'y') => ({x, y}[v])),
+      );
       expect(wrongFlow).toBeObservable(e);
-      expect(x).toHaveSubscriptions('^-------!'); // x not stopped -> leak
-      expect(y).toHaveSubscriptions([]);
+      expect(x).toHaveSubscriptions(xSubs);
+      expect(y).toHaveSubscriptions(ySubs);
     }
   });
 });
