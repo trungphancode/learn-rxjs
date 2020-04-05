@@ -4,7 +4,7 @@
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/operators
  */
 import {cold, getTestScheduler, time} from 'jasmine-marbles';
-import {concat, merge, of, pipe, throwError} from 'rxjs';
+import {concat, defer, iif, merge, of, pipe, throwError} from 'rxjs';
 import {
   catchError,
   combineAll,
@@ -17,6 +17,7 @@ import {
   filter,
   finalize,
   map,
+  mapTo,
   mergeAll,
   mergeMap,
   reduce,
@@ -390,5 +391,61 @@ describe('Operator share() pipe', () => {
             map(() => 'a'));
     const e = cold('(a|)');
     expect(o).toBeObservable(e);
+  });
+});
+
+describe('Operator share() and retry()', () => {
+  it('should be able to use together', () => {
+    // Each emission from flow fA and fB simulates the effort to make RPC for data.
+    // But for each RPC, we must make a common check to get a valid token for RPC.
+    // The common checks take time and can fail; so, they are shared and retryable.
+
+    const fA = cold('aA--------a|      '); // first a trigger check 1, second A wait for shared check 1, last a wait for shared check 3
+    const fB = cold('---------b|       '); // b trigger check 3
+    const c1 = cold('--(f|)            '); // check 1: failure => retry with check 2
+    const c1Subs = ('^-!               '); // check 1 subscription
+    const c2 = cold('  --(s|)          '); // check 2: success
+    const c2Subs = ('--^-!             '); // check 2 subscription right after check 1
+    const c3 = cold('         --(f|)   '); // check 3: failure => retry with check 4
+    const c3Subs = ('---------^-!      '); // check 3 subscription
+    const c4 = cold('           --(s|) '); // check 4: success
+    const c4Subs = ('-----------^-!    '); // check 4 subscription right after check 3
+    const ex = cold('----(aA)-----(ba|)'); // expected final flow
+    //           c2 done ^        ^ c4 done
+
+    let numCheck = 0; // number of actual check runs: should be only 4: 2 failure, 2 success
+    // actualCheck is a simulation of checking and getting valid token (failure followed by success)
+    const actualCheck = defer(() => [c1, c2, c3, c4][numCheck++]);
+    // sharedCheck is real code to show that common checks can be shared and retried
+    const sharedCheck = actualCheck.pipe(
+        share(),
+        // If error is thrown after share(), this aggregate is needed to terminate the share() pipe,
+        // making this pipe repeatable for retry.
+        // Try moving the error throwing before share() and removing this aggregate, test will pass.
+        // This aggregate function waits until the actual check is complete and takes the final result.
+        reduce((acc, v) => v),
+        tap(checkedResult => {
+          // This block runs 8 times: 1 failure & 1 success for each emission of fA and fB
+          // But actual checks above run 4 times because of shared checks: 2 failure & 2 success
+          if (checkedResult === 'f') {
+            // Show case throwing Error after share() and before retry()
+            throw new Error('Failed check');
+          }
+        }),
+        retry(),
+        tap(checkedResult => {
+          // This block runs 4 times because 4 failure checks are retried
+          expect(checkedResult).toBe('s'); // success
+        }),
+    );
+
+    const faWithCheck = fA.pipe(mergeMap(v => sharedCheck.pipe(mapTo(v))));
+    const fbWithCheck = fB.pipe(mergeMap(v => sharedCheck.pipe(mapTo(v))));
+    expect(merge(faWithCheck, fbWithCheck)).toBeObservable(ex);
+    expect(numCheck).toBe(4);
+    expect(c1).toHaveSubscriptions(c1Subs);
+    expect(c2).toHaveSubscriptions(c2Subs);
+    expect(c3).toHaveSubscriptions(c3Subs);
+    expect(c4).toHaveSubscriptions(c4Subs);
   });
 });
