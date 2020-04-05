@@ -1,5 +1,6 @@
-import {ObservableInput, UnaryFunction} from "rxjs/src/internal/types";
-import {defer} from "rxjs";
+import {ObservableInput, UnaryFunction} from 'rxjs/src/internal/types';
+import {defer} from 'rxjs';
+
 
 /**
  * Conditionally selects pipe for the stream. The condition is evaluated at

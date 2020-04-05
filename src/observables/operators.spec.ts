@@ -4,7 +4,7 @@
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/operators
  */
 import {cold, getTestScheduler, time} from 'jasmine-marbles';
-import {concat, defer, iif, merge, of, pipe, throwError} from 'rxjs';
+import {concat, defer, merge, of, pipe, throwError} from 'rxjs';
 import {
   catchError,
   combineAll,

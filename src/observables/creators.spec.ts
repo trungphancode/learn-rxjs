@@ -22,13 +22,8 @@ import {
   zip
 } from 'rxjs';
 import {filter, map, take} from 'rxjs/operators';
-import {advanceTime} from "../testing/scheduler";
-import {SubscriptionLoggable} from "rxjs/internal/testing/SubscriptionLoggable";
-import {
-  ObservableInput,
-  SubscribableOrPromise,
-  UnaryFunction
-} from "rxjs/src/internal/types";
+import {advanceTime} from '../testing/scheduler';
+import {SubscriptionLoggable} from 'rxjs/internal/testing/SubscriptionLoggable';
 
 
 describe('new Observable()', () => {

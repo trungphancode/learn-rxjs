@@ -13,7 +13,7 @@ import {
 } from 'jasmine-marbles';
 import {delay, tap} from 'rxjs/operators';
 import {timer} from 'rxjs';
-import {SubscriptionLog} from "rxjs/internal/testing/SubscriptionLog";
+import {SubscriptionLog} from 'rxjs/internal/testing/SubscriptionLog';
 
 
 describe('Jasmine-marbles', () => {

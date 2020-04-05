@@ -1,7 +1,8 @@
-import {cold} from "jasmine-marbles";
-import {pipe} from "rxjs";
-import {filter, map} from "rxjs/operators";
-import {pipeIf} from "./pipe_if";
+import {cold} from 'jasmine-marbles';
+import {pipe} from 'rxjs';
+import {filter, map} from 'rxjs/operators';
+import {pipeIf} from './pipe_if';
+
 
 describe('Custom operator pipeIf()', () => {
   for (const externalCondition of [false, true]) {
