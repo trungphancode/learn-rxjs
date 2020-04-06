@@ -12,6 +12,7 @@ import {
   concatMap,
   defaultIfEmpty,
   delay,
+  distinctUntilChanged,
   exhaust,
   exhaustMap,
   filter,
@@ -20,6 +21,7 @@ import {
   mapTo,
   mergeAll,
   mergeMap,
+  pairwise,
   reduce,
   repeat,
   retry,
@@ -487,5 +489,23 @@ describe('Operator share() and retry()', () => {
     expect(c2).toHaveSubscriptions(c2Subs);
     expect(c3).toHaveSubscriptions(c3Subs);
     expect(c4).toHaveSubscriptions(c4Subs);
+  });
+});
+
+describe('Operator pairwise()', () => {
+  it('should provide previous values but ignore the first value', () => {
+    const o = cold('x---y---z-|');
+    const e = cold('----A---B-|', {A: ['x', 'y'], B: ['y', 'z']});
+    const operators = pairwise();
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+});
+
+describe('Operator distinctUntilChanged()', () => {
+  it('should provide distinct values', () => {
+    const o = cold('xxy-y-x-zz-|');
+    const e = cold('x-y---x-z--|');
+    const operators = distinctUntilChanged();
+    expect(o.pipe(operators)).toBeObservable(e);
   });
 });
