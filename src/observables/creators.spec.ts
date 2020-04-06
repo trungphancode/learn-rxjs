@@ -133,7 +133,7 @@ describe('Creation operator onErrorResumeNext()', () => {
 describe('Creation operator combineLatest()', () => {
   it('should wait until each flow emits at least once and finish when all flows finish', () => {
     const x = cold('-x-y-z-|');
-    const y = cold('--a-b|    ');
+    const y = cold('--a-b|  ');
     const o = combineLatest([x, y]).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('--ABCD-|', {A: 'xa', B: 'ya', C: 'yb', D: 'zb'});
     const xSubs = ('^------!');

@@ -78,8 +78,8 @@ describe('Operator takeUntil()', () => {
   it('should error when the notifier flow throws error without emitting', () => {
     const o = cold('x-y-z|');
     const n = cold('-#    ');  // notifier throws error
-    const e = cold('x#');
-    const oSubs = ('^!  '); // o is unsubscribed early
+    const e = cold('x#    ');
+    const oSubs = ('^!    '); // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
@@ -87,9 +87,9 @@ describe('Operator takeUntil()', () => {
 
   it('should not throw error if the notifier flow emits at least one before throwing error', () => {
     const o = cold('x-y-z|');
-    const n = cold('-s-#    ');  // notifier emits then throws error
-    const e = cold('x|');
-    const oSubs = ('^!  '); // o is unsubscribed early
+    const n = cold('-s-#  ');  // notifier emits then throws error
+    const e = cold('x|    ');
+    const oSubs = ('^!    '); // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
@@ -107,7 +107,7 @@ describe('Operator throttleTime()', () => {
   it('should throttle emissions for duration > 0', () => {
     const o = cold('-x-y-z|');
     const e = cold('-x---z|');
-    const t = time(' ---| ');
+    const t = time(' ---|  ');
     const operators = throttleTime(t, getTestScheduler());
     expect(o.pipe(operators)).toBeObservable(e);
   });
@@ -219,8 +219,8 @@ describe('Operator tap-catchError-finalize', () => {
     const o = cold('-x-y-|');
     const e = cold('-x-y-|');
     const operators = pipe(
-        tap((_) => 'a'),  // ignore return value
-        catchError((err) => throwError(err)),
+        tap(_ => 'a'),  // ignore return value
+        catchError(err => throwError(err)),
         finalize(() => 'b'),  // ignore return value
     );
     expect(o.pipe(operators)).toBeObservable(e);
@@ -230,8 +230,8 @@ describe('Operator tap-catchError-finalize', () => {
     const o = cold('-x-y-#');
     const e = cold('-x-y-#');
     const operators = pipe(
-        tap((_) => 'a'),
-        catchError((err) => throwError(err)),
+        tap(_ => 'a'),
+        catchError(err => throwError(err)),
         finalize(() => 'b'),
     );
     expect(o.pipe(operators)).toBeObservable(e);
@@ -252,7 +252,7 @@ describe('Operator concatAll()', () => {
     const x = cold('  -a---b|              ');
     const y = cold('        -c---d|        ');
     const z = cold('                -e---f|');
-    const o = cold('--x-y-----------z|   ', {x, y, z});
+    const o = cold('--x-y-----------z|     ', {x, y, z});
     const e = cold('---a---b-c---d---e---f|');
     const xSubs = ('--^-----!              '); // subscribe after x emit
     const ySubs = ('--------^-----!        '); // subscribe after x done
