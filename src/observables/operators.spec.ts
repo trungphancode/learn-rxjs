@@ -2,6 +2,7 @@
  * Demonstrates how rxjs operators are used.
  * @see https://rxmarbles.com
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/operators
+ * @see https://github.com/ReactiveX/rxjs/tree/6.x/spec/operators
  */
 import {cold, getTestScheduler, time} from 'jasmine-marbles';
 import {concat, defer, merge, of, pipe, throwError} from 'rxjs';
@@ -59,7 +60,7 @@ describe('Operator takeUntil()', () => {
     const o = cold('x-y-z|');
     const n = cold('---s-|');  // notifier emits
     const e = cold('x-y|  ');
-    const oSubs = ('^--!  '); // o is unsubscribed early
+    const oSubs = ['^--!  ']; // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
@@ -69,7 +70,7 @@ describe('Operator takeUntil()', () => {
     const o = cold('x-y-z|');
     const n = cold('-|    ');  // notifier does not emit
     const e = cold('x-y-z|');
-    const oSubs = ('^----!');
+    const oSubs = ['^----!'];
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
@@ -79,7 +80,7 @@ describe('Operator takeUntil()', () => {
     const o = cold('x-y-z|');
     const n = cold('-#    ');  // notifier throws error
     const e = cold('x#    ');
-    const oSubs = ('^!    '); // o is unsubscribed early
+    const oSubs = ['^!    ']; // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
@@ -89,7 +90,7 @@ describe('Operator takeUntil()', () => {
     const o = cold('x-y-z|');
     const n = cold('-s-#  ');  // notifier emits then throws error
     const e = cold('x|    ');
-    const oSubs = ('^!    '); // o is unsubscribed early
+    const oSubs = ['^!    ']; // o is unsubscribed early
     const operators = takeUntil(n);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
@@ -117,7 +118,7 @@ describe('Operator delay()', () => {
   it('should delay all emissions', () => {
     const o = cold('-x--y--z| ');
     const e = cold('--x--y--z|');
-    const oSubs = ('^-------! ');
+    const oSubs = ['^-------! '];
     const operators = delay(time('-|'), getTestScheduler());
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
@@ -139,9 +140,9 @@ describe('Operator mergeMap()', () => {
     const y = cold('  -c---d|     ');
     const z = cold('       -e---f|');
     const e = cold('-a-c-b-de---f|');
-    const xSubs = ('^-----!       ');
-    const ySubs = ('--^-----!     ');
-    const zSubs = ('-------^-----!');
+    const xSubs = ['^-----!       '];
+    const ySubs = ['--^-----!     '];
+    const zSubs = ['-------^-----!'];
     const operators = mergeMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -165,9 +166,9 @@ describe('Operator concatMap()', () => {
     const y = cold('        -c---d|      ');  // subscribe after x done
     const z = cold('              -e---f|');  // subscribe after y done
     const e = cold('---a---b-c---d-e---f|');
-    const xSubs = ('--^-----!            ');
-    const ySubs = ('--------^-----!      ');
-    const zSubs = ('--------------^-----!');
+    const xSubs = ['--^-----!            '];
+    const ySubs = ['--------^-----!      '];
+    const zSubs = ['--------------^-----!'];
     const operators = concatMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -184,9 +185,9 @@ describe('Operator switchMap()', () => {
     const y = cold('    -c---d|     ');
     const z = cold('         -e---f|');
     const e = cold('---a-c----e---f|');
-    const xSubs = ('--^-!           '); // x is unsubscribed earlier
-    const ySubs = ('----^----!      '); // y is unsubscribed earlier
-    const zSubs = ('---------^-----!');
+    const xSubs = ['--^-!           ']; // x is unsubscribed earlier
+    const ySubs = ['----^----!      ']; // y is unsubscribed earlier
+    const zSubs = ['---------^-----!'];
     const operators = switchMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -203,9 +204,9 @@ describe('Operator exhaustMap()', () => {
     const y = cold('    -c---d|     ');
     const z = cold('         -e---f|');
     const e = cold('---a---b--e---f|');
-    const xSubs = ('--^-----!       ');
+    const xSubs = ['--^-----!       '];
     const ySubs = [] as string[]; // y is ignored, not subscribed
-    const zSubs = ('---------^-----!');
+    const zSubs = ['---------^-----!'];
     const operators = exhaustMap((v: 'x' | 'y' | 'z') => ({x, y, z}[v]));
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -254,9 +255,9 @@ describe('Operator concatAll()', () => {
     const z = cold('                -e---f|');
     const o = cold('--x-y-----------z|     ', {x, y, z});
     const e = cold('---a---b-c---d---e---f|');
-    const xSubs = ('--^-----!              '); // subscribe after x emit
-    const ySubs = ('--------^-----!        '); // subscribe after x done
-    const zSubs = ('----------------^-----!'); // subscribe after y done
+    const xSubs = ['--^-----!              ']; // subscribe after x emit
+    const ySubs = ['--------^-----!        ']; // subscribe after x done
+    const zSubs = ['----------------^-----!']; // subscribe after y done
     const operators = concatAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -272,9 +273,9 @@ describe('Operator mergeAll()', () => {
     const z = cold('         -e---f|');  // subscribe after z emit
     const o = cold('--x-y----z|     ', {x, y, z});
     const e = cold('---a-c-b-de---f|');
-    const xSubs = ('--^-----!       ');
-    const ySubs = ('----^-----!     ');
-    const zSubs = ('---------^-----!');
+    const xSubs = ['--^-----!       '];
+    const ySubs = ['----^-----!     '];
+    const zSubs = ['---------^-----!'];
     const operators = mergeAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -291,9 +292,9 @@ describe('Operator switchAll()', () => {
     const z = cold('         -e---f|');
     const o = cold('--x-y----z|     ', {x, y, z});
     const e = cold('---a-c----e---f|');
-    const xSubs = ('--^-!           '); // x is unsubscribed early
-    const ySubs = ('----^----!      '); // y is unsubscribed early
-    const zSubs = ('---------^-----!');
+    const xSubs = ['--^-!           ']; // x is unsubscribed early
+    const ySubs = ['----^----!      ']; // y is unsubscribed early
+    const zSubs = ['---------^-----!'];
     const operators = switchAll();  // equivalent to concatMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -309,9 +310,9 @@ describe('Operator exhaust()', () => {
     const z = cold('         -e---f|');
     const o = cold('--x-y----z|     ', {x, y, z});
     const e = cold('---a---b--e---f|');
-    const xSubs = ('--^-----!       ');
+    const xSubs = ['--^-----!       '];
     const ySubs = [] as string[]; // y is ignored, not subscribed
-    const zSubs = ('---------^-----!');
+    const zSubs = ['---------^-----!'];
     const operators = exhaust();  // equivalent to exhaustMap((v) => v)
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -326,8 +327,8 @@ describe('Operator zipAll()', () => {
     const y = cold('        --a----b--c|');
     const o = cold('---xy---|           ', {x, y});
     const e = cold('----------A----(B|) ', {A: 'ma', B: 'nb'});
-    const xSubs = ('--------^-----!     '); // both (x,y) subscribed after o done
-    const ySubs = ('--------^------!    '); // y unsubscribed early since x done
+    const xSubs = ['--------^-----!     ']; // both (x,y) subscribed after o done
+    const ySubs = ['--------^------!    ']; // y unsubscribed early since x done
     const operators = zipAll((m, a) => `${m}${a}`);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -341,8 +342,8 @@ describe('Operator combineAll()', () => {
     const y = cold('       --a--b--c-|');
     const o = cold('--xy---|          ', {x, y});
     const e = cold('---------AB-C--D-|', {A: 'ma', B: 'na', C: 'nb', D: 'nc'});
-    const xSubs = ('-------^-----!    ');  // x subscribed after o done
-    const ySubs = ('-------^---------!');  // y subscribed after o done
+    const xSubs = ['-------^-----!    '];  // x subscribed after o done
+    const ySubs = ['-------^---------!'];  // y subscribed after o done
     const operators = combineAll((m, a) => `${m}${a}`);
     expect(o.pipe(operators)).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
@@ -445,13 +446,13 @@ describe('Operator share() and retry()', () => {
     const fA = cold('aA--------a|      '); // first a trigger check 1, second A wait for shared check 1, last a wait for shared check 3
     const fB = cold('---------b|       '); // b trigger check 3
     const c1 = cold('--(f|)            '); // check 1: failure => retry with check 2
-    const c1Subs = ('^-!               '); // check 1 subscription
+    const c1Subs = ['^-!               ']; // check 1 subscription
     const c2 = cold('  --(s|)          '); // check 2: success
-    const c2Subs = ('--^-!             '); // check 2 subscription right after check 1
+    const c2Subs = ['--^-!             ']; // check 2 subscription right after check 1
     const c3 = cold('         --(f|)   '); // check 3: failure => retry with check 4
-    const c3Subs = ('---------^-!      '); // check 3 subscription
+    const c3Subs = ['---------^-!      ']; // check 3 subscription
     const c4 = cold('           --(s|) '); // check 4: success
-    const c4Subs = ('-----------^-!    '); // check 4 subscription right after check 3
+    const c4Subs = ['-----------^-!    ']; // check 4 subscription right after check 3
     const ex = cold('----(aA)-----(ba|)'); // expected final flow
     //           c2 done ^        ^ c4 done
 

@@ -38,10 +38,53 @@ describe('Jasmine-marbles', () => {
     const t1 = time('---|     '); // subscribedFrame
     const t2 = time('------|  '); // unsubscribedFrame
     const eSubs1 = ('---^--! '); // expected subscription marbles
-    const eSubs2 = ('   ^--! '); // expected subscription marbles with spaces
+    const eSubs2 = ('   ^--! '); // expected subscription marbles with leading spaces
+    const eSubs3 = ('   ^  ! '); // expected subscription marbles with spaces
     const subscriptionLog = new SubscriptionLog(t1, t2);
     getTestScheduler().expectSubscriptions([subscriptionLog]).toBe(eSubs1);
     getTestScheduler().expectSubscriptions([subscriptionLog]).toBe(eSubs2);
+    getTestScheduler().expectSubscriptions([subscriptionLog]).toBe(eSubs3);
+  });
+
+  it('cold observable dispatch based on subscription', () => {
+    const observable = cold('x--y|    ');
+    const observer01SubsM = '-^       ';
+    const expected01 = cold('-x--y|   ');
+    const observer02SubsM = '---^     ';
+    const expected02 = cold('---x--y| ');
+    const observableSubs = ['-^---!   ',
+      /*                */  '---^---! '];
+    getTestScheduler().expectObservable(observable, observer01SubsM).toBe(expected01.marbles, expected01.values);
+    getTestScheduler().expectObservable(observable, observer02SubsM).toBe(expected02.marbles, expected02.values);
+    getTestScheduler().expectSubscriptions(observable.getSubscriptions()).toBe(observableSubs);
+  });
+
+  it('hot observable dispatch based on subscription', () => {
+    const observable = hot(' abcd|   ');
+    const observer01SubsM = '-^      ';
+    const expected01 = cold('-bcd|   ');
+    const observer02SubsM = '---^    ';
+    const expected02 = cold('---d|   ');
+    const observableSubs = ['-^--!   ',
+      /*                */  '---^!   '];
+    getTestScheduler().expectObservable(observable, observer01SubsM).toBe(expected01.marbles, expected01.values);
+    getTestScheduler().expectObservable(observable, observer02SubsM).toBe(expected02.marbles, expected02.values);
+    getTestScheduler().expectSubscriptions(observable.getSubscriptions()).toBe(observableSubs);
+  });
+
+  it('should subscribe observable at the beginning when using expect()', () => {
+    const observable = cold('-x-y|');
+    expect(observable).toBeObservable(observable);
+    expect(observable).toHaveSubscriptions('^---!');
+  });
+
+  it('should subscribe observable at specified subscription when using getTestScheduler().expectObservable()', () => {
+    const observable = cold('-x-y|  ');
+    const observableSubsM = '--^    ';
+    const expectedOb = cold('---x-y|');
+    const observableSubs = ['--^---!'];
+    getTestScheduler().expectObservable(observable, observableSubsM).toBe(expectedOb.marbles, expectedOb.values);
+    getTestScheduler().expectSubscriptions(observable.getSubscriptions()).toBe(observableSubs);
   });
 
   it('should support time progression syntax for cold', () => {

@@ -2,6 +2,7 @@
  * Demonstrates how observables are created.
  * @see https://rxmarbles.com
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/observables
+ * @see https://github.com/ReactiveX/rxjs/tree/6.x/spec/observables
  */
 import {cold, getTestScheduler, hot, time} from 'jasmine-marbles';
 import {
@@ -10,7 +11,6 @@ import {
   defer,
   forkJoin,
   iif,
-  interval,
   merge,
   Observable,
   of,
@@ -22,61 +22,74 @@ import {
   zip
 } from 'rxjs';
 import {filter, map, take} from 'rxjs/operators';
-import {advanceTime} from '../testing/scheduler';
-import {SubscriptionLoggable} from 'rxjs/internal/testing/SubscriptionLoggable';
+import {
+  TestColdObservable,
+  TestHotObservable,
+} from 'jasmine-marbles/src/test-observables';
 
 
 describe('new Observable()', () => {
   it('should create a cold Observable when activating producer inside the subscription', () => {
-    const producer = cold('-x-y-z|');
-    const o = new Observable<string>(observer => {
-      // This block will run when observer subscribes
-      const subscription: Subscription = producer.subscribe(
-          v => observer.next(v),
-          err => observer.error(err),
-          () => observer.complete(),
-      ); // subscribe to the producer inside this observer's subscription
-      return () => {
-        // cleanup when observer unsubscribe or producer completes or errors
-        subscription.unsubscribe();
-      };
-    });
-    advanceTime('--|');
-    expect(o) // observer 1
-        .toBeObservable(cold('---x-y-z|'));
-    expect(o.pipe(take(2))) // observer 2, unsubscribe early
-        .toBeObservable(cold('---------x-(y|)'));
-    expect(producer).toHaveSubscriptions([
-      '--^-----!---',  // subscribed for observer 1
-      '--------^--!',  // subscribed for observer 2 and unsubscribed early
-    ]);
+    function createColdObservableFromColdProducer(producer: TestColdObservable): Observable<string> {
+      return new Observable<string>(observer => {
+        // This block will run when observer subscribes
+        const subscription: Subscription = producer.subscribe(
+            v => observer.next(v),
+            err => observer.error(err),
+            () => observer.complete(),
+        ); // subscribe to the producer inside this observer's subscription
+        return () => {
+          // cleanup when observer unsubscribe or producer completes or errors
+          subscription.unsubscribe();
+        };
+      });
+    }
+
+    const producer1 = cold('-x-y-z|    ');
+    const obsvable1 = createColdObservableFromColdProducer(producer1);
+    const obsvable1SubsM = '--^        ';
+    const obsvable2 = obsvable1.pipe(take(2));
+    const obsvable2SubsM = '----^      ';
+    const expected1 = cold('---x-y-z|  ');
+    const expected2 = cold('-----x-(y|)');
+    const producer1Subs = ['--^-----!  ',  /// subscribed for observer 1
+      /*                */ '----^--!   '];  // subscribed for observer 2 and unsubscribed early
+
+    getTestScheduler().expectObservable(obsvable1, obsvable1SubsM).toBe(expected1.marbles, expected1.values);
+    getTestScheduler().expectObservable(obsvable2, obsvable2SubsM).toBe(expected2.marbles, expected2.values);
+    getTestScheduler().expectSubscriptions(producer1.getSubscriptions()).toBe(producer1Subs);
   });
 
   it('should create hot Observable when activating producer outside the subscription', () => {
-    const logger = new SubscriptionLoggable();
-    logger.scheduler = getTestScheduler();
-    const ticks = interval(20, getTestScheduler()); // tick every 20ms
-    // Create a hot observable that emit -0-1-2-3-4-5...
-    const o = new Observable<string>(observer => {
-      const subscription: Subscription = ticks.subscribe(
-          () => observer.next(`${(getTestScheduler().now() - 20) / 20}`),
-          err => observer.error(err),
-          () => observer.complete(),
-      );
-      const index = logger.logSubscribedFrame();
-      return () => {
-        logger.logUnsubscribedFrame(index);
-        subscription.unsubscribe();
-      };
-    });
-    expect(o.pipe(take(2))) // observer 1
-        .toBeObservable(hot('--0-(1|)      '));
-    expect(o.pipe(take(3))) // observer 2
-        .toBeObservable(hot('------2-3-(4|)'));
-    getTestScheduler().expectSubscriptions(logger.subscriptions).toBe([
-      '^---!------', // observer 1's subscription
-      '----^-----!', // observer 2's subscription
-    ]);
+    function createHotObservableFromColdProducer(producer: TestHotObservable): Observable<string> {
+      return new Observable<string>(observer => {
+        // This block will run when observer subscribes, but the producer is
+        // hot (i.e. already activated outside).
+        const subscription: Subscription = producer.subscribe(
+            v => observer.next(v),
+            err => observer.error(err),
+            () => observer.complete(),
+        );
+        return () => {
+          // cleanup when observer unsubscribe or producer completes or errors
+          subscription.unsubscribe();
+        };
+      });
+    }
+
+    const producer1 = hot(' -a-b-c-d-e-f-g-h-i-j|');
+    const obsvable1 = createHotObservableFromColdProducer(producer1);
+    const obsvable1SubsM = '--^                  ';
+    const expected1 = hot(' ---b-c-d-e-f-g-h-i-j|');
+    const obsvable2 = obsvable1.pipe(take(2));
+    const obsvable2SubsM = '----^                ';
+    const expected2 = hot(' -----c-(d|)          ');
+    const producer1Subs = ['--^-----------------!',  /// subscribed for observer 1
+      /*                */ '----^--!             '];  // subscribed for observer 2 and unsubscribed early
+
+    getTestScheduler().expectObservable(obsvable1, obsvable1SubsM).toBe(expected1.marbles, expected1.values);
+    getTestScheduler().expectObservable(obsvable2, obsvable2SubsM).toBe(expected2.marbles, expected2.values);
+    getTestScheduler().expectSubscriptions(producer1.getSubscriptions()).toBe(producer1Subs);
   });
 });
 
@@ -94,8 +107,8 @@ describe('Creation operator merge()', () => {
     const y = cold('a-b|    ');
     const o = merge(x, y);
     const e = cold('axby-z-|');
-    const xSubs = ('^------!');
-    const ySubs = ('^--!    ');
+    const xSubs = ['^------!'];
+    const ySubs = ['^--!    '];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -108,8 +121,8 @@ describe('Creation operator concat()', () => {
     const y = cold('     -c-d|');
     const o = concat(x, y);
     const e = cold('-a-b--c-d|');
-    const xSubs = ('^----!    ');
-    const ySubs = ('-----^---!');
+    const xSubs = ['^----!    '];
+    const ySubs = ['-----^---!'];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -122,8 +135,8 @@ describe('Creation operator onErrorResumeNext()', () => {
     const y = cold('     -c-d#');
     const o = onErrorResumeNext(x, y);
     const e = cold('-a-b--c-d|');
-    const xSubs = ('^----!    ');
-    const ySubs = ('-----^---!');
+    const xSubs = ['^----!    '];
+    const ySubs = ['-----^---!'];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -136,8 +149,8 @@ describe('Creation operator combineLatest()', () => {
     const y = cold('--a-b|  ');
     const o = combineLatest([x, y]).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('--ABCD-|', {A: 'xa', B: 'ya', C: 'yb', D: 'zb'});
-    const xSubs = ('^------!');
-    const ySubs = ('^----!  ');
+    const xSubs = ['^------!'];
+    const ySubs = ['^----!  '];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -161,8 +174,8 @@ describe('Creation operator zip()', () => {
     const y = cold('--a-b|  ');
     const o = zip(x, y);
     const e = cold('--A-B|  ', {A: ['x', 'a'], B: ['y', 'b']});
-    const xSubs = ('^----!  '); // x is unsubscribed early
-    const ySubs = ('^----!  ');
+    const xSubs = ['^----!  ']; // x is unsubscribed early
+    const ySubs = ['^----!  '];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -173,8 +186,8 @@ describe('Creation operator zip()', () => {
     const y = cold('--abcdef|        ');
     const o = zip(x, y).pipe(map(([x, y]) => `${x}${y}`));
     const e = cold('----------A-B-C-|', {A: 'xa', B: 'yb', C: 'zc'});
-    const xSubs = ('^---------------!');
-    const ySubs = ('^-------!        ');
+    const xSubs = ['^---------------!'];
+    const ySubs = ['^-------!        '];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -188,9 +201,9 @@ describe('Creation operator forkJoin()', () => {
     const z = cold('-f---g-|    ');
     const o = forkJoin([x, y, z]);
     const e = cold('--------(A|)', {A: ['c', 'e', 'g']});
-    const xSubs = ('^-------!   ');
-    const ySubs = ('^-----!     ');
-    const zSubs = ('^------!    ');
+    const xSubs = ['^-------!   '];
+    const ySubs = ['^-----!     '];
+    const zSubs = ['^------!    '];
     expect(o).toBeObservable(e);
     // Note: x, y, z must be finite for o to emit.
     expect(x).toHaveSubscriptions(xSubs);
@@ -204,9 +217,9 @@ describe('Creation operator forkJoin()', () => {
     const z = cold('-f---g-| ');
     const o = forkJoin([x, y, z]);
     const e = cold('---|     ');
-    const xSubs = ('^--!     ');
-    const ySubs = ('^--!     '); // y unsubscribed early
-    const zSubs = ('^--!     '); // z unsubscribed early
+    const xSubs = ['^--!     '];
+    const ySubs = ['^--!     ']; // y unsubscribed early
+    const zSubs = ['^--!     ']; // z unsubscribed early
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -219,9 +232,9 @@ describe('Creation operator forkJoin()', () => {
     const z = cold('-f---g-| ');
     const o = forkJoin([x, y, z]);
     const e = cold('-----#   ');
-    const xSubs = ('^----!   ');
-    const ySubs = ('^----!   '); // y unsubscribed early
-    const zSubs = ('^----!   '); // z unsubscribed early
+    const xSubs = ['^----!   '];
+    const ySubs = ['^----!   ']; // y unsubscribed early
+    const zSubs = ['^----!   ']; // z unsubscribed early
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -236,9 +249,9 @@ describe('Creation operator race()', () => {
     const z = cold('-f---g-|  ');
     const o = race([x, y, z]);
     const e = cold('-f---g-|  ');
-    const xSubs = ('^!        '); // x is unsubscribed early
-    const ySubs = ('^!        '); // y is unsubscribed early
-    const zSubs = ('^------!  ');
+    const xSubs = ['^!        ']; // x is unsubscribed early
+    const ySubs = ['^!        ']; // y is unsubscribed early
+    const zSubs = ['^------!  '];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -251,9 +264,9 @@ describe('Creation operator race()', () => {
     const z = cold('-#        ');
     const o = race(x, y, z);
     const e = cold('-#        ');
-    const xSubs = ('^!        '); // x is unsubscribed early
-    const ySubs = ('^!        '); // y is unsubscribed early
-    const zSubs = ('^!        ');
+    const xSubs = ['^!        ']; // x is unsubscribed early
+    const ySubs = ['^!        ']; // y is unsubscribed early
+    const zSubs = ['^!        '];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -266,9 +279,9 @@ describe('Creation operator race()', () => {
     const z = cold('-|        ');
     const o = race(x, y, z);
     const e = cold('-|        ');
-    const xSubs = ('^!        '); // x is unsubscribed early
-    const ySubs = ('^!        '); // y is unsubscribed early
-    const zSubs = ('^!        ');
+    const xSubs = ['^!        ']; // x is unsubscribed early
+    const ySubs = ['^!        ']; // y is unsubscribed early
+    const zSubs = ['^!        '];
     expect(o).toBeObservable(e);
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
@@ -278,13 +291,13 @@ describe('Creation operator race()', () => {
 
 describe('Creation operator defer()', () => {
   it('should only run when subscribed', () => {
-    const x = cold('  x-y|');
+    const x = cold('x-y|  ');
     const o = defer(() => x);
+    const xSubsM = '--^   ';
     const e = cold('--x-y|');
-    const xSubs = ('--^--!');
-    advanceTime('--|');
-    expect(o).toBeObservable(e);
-    expect(x).toHaveSubscriptions(xSubs);
+    const xSubs = ['--^--!'];
+    getTestScheduler().expectObservable(o, xSubsM).toBe(e.marbles, e.values);
+    getTestScheduler().expectSubscriptions(x.getSubscriptions()).toBe(xSubs);
   });
 
   it('should be able to simulate iff() operator', () => {
