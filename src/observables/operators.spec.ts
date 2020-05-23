@@ -3,16 +3,53 @@
  * @see https://rxmarbles.com
  * @see https://github.com/ReactiveX/rxjs/tree/master/spec/operators
  * @see https://github.com/ReactiveX/rxjs/tree/6.x/spec/operators
+ *
+ *
+ * Operators debounceTime, throttleTime, auditTime, sampleTime. Operator
+ * debounceTime starts the timer for specified duration whenever the original
+ * stream emit values but the timer is replaced with a new timer when new values
+ * are emitted. It's like switchMap with delay. ThrottleTime emits lucky values
+ * and starts the timer for specified duration and ignore all other unlucky
+ * values until the timer ends. It's like exhaustMap with delay. Operator
+ * auditTime is similar to throttleTime in terms of triggering timer, but emit
+ * the event at the end of the timer's duration with the latest value from the
+ * original stream. For sampleTime the timer with recurrent interval is started
+ * when subscribed and continue to complete to control which items are selected.
+ *
+ * original    : --abcdefghijklmnop------abcd----ab---cd-ef----|
+ * duration 20 : --|
+ * debounceTime: -------------------p---------d-----b-------f--|
+ *        timer: -----------------!---------!-----!-------!----|
+ * throttleTime: --a--d--g--j--m--p------a--d----a----c--e-----|
+ *        timer: --!--!--!--!--!--!------!--!----!----!--!-----|
+ * auditTime   : ----c--f--i--l--o--p------c--d----b----d--f---|
+ *        timer: --!--!--!--!--!--!------!--!----!----!--!-----|
+ * sampleTime  : ----c-e-g-i-k-m-o-p-----a-c-d---a-b---d-e-f---|
+ *        timer: !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-|
+ *
+ * Operator debounceTime() is good for feature like: search while typing.
  */
 import {cold, getTestScheduler, time} from 'jasmine-marbles';
-import {concat, defer, merge, of, pipe, throwError} from 'rxjs';
 import {
+  concat,
+  defer,
+  merge,
+  Observable,
+  of,
+  pipe,
+  ReplaySubject,
+  throwError,
+} from 'rxjs';
+import {
+  auditTime,
   catchError,
   combineAll,
   concatAll,
   concatMap,
+  debounceTime,
   defaultIfEmpty,
   delay,
+  distinct,
   distinctUntilChanged,
   exhaust,
   exhaustMap,
@@ -26,6 +63,7 @@ import {
   reduce,
   repeat,
   retry,
+  sampleTime,
   share,
   startWith,
   switchAll,
@@ -33,9 +71,55 @@ import {
   takeUntil,
   tap,
   throttleTime,
+  withLatestFrom,
   zipAll
 } from 'rxjs/operators';
 
+
+describe('Operators debounceTime, throttleTime, auditTime, sampleTime comparison', () => {
+  it('should match description', () => {
+    const original = cold('--abcdefghijklmnop------abcd----ab---cd-ef----|');
+    const duration = time('--|'); // === 20
+    const debounce = cold('-------------------p---------d-----b-------f--|');
+    // timer for debounce  -----------------!---------!-----!-------!----
+    const throttle = cold('--a--d--g--j--m--p------a--d----a----c--e-----|');
+    // timer for throttle  --!--!--!--!--!--!------!--!----!----!--!-----
+    const auditTim = cold('----c--f--i--l--o--p------c--d----b----d--f---|');
+    // timer for audit     --!--!--!--!--!--!------!--!----!----!--!-----
+    const sampleTi = cold('----c-e-g-i-k-m-o-p-----a-c-d---a-b---d-e-f---|');
+    // timer for sample    !-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-!-
+
+    getTestScheduler().expectObservable(
+        original.pipe(debounceTime(duration, getTestScheduler())))
+        .toBe(debounce.marbles);
+    getTestScheduler().expectObservable(
+        original.pipe(throttleTime(duration, getTestScheduler())))
+        .toBe(throttle.marbles);
+    getTestScheduler().expectObservable(
+        original.pipe(auditTime(duration, getTestScheduler())))
+        .toBe(auditTim.marbles);
+    getTestScheduler().expectObservable(
+        original.pipe(sampleTime(duration, getTestScheduler())))
+        .toBe(sampleTi.marbles);
+
+    const debounceAlternative = switchMap(v => of(v).pipe(delay(duration, getTestScheduler())));
+    getTestScheduler().expectObservable(original.pipe(debounceAlternative))
+        .toBe(debounce.marbles);
+
+    const throttleAlternative = exhaustMap(v => concat(of(v), of().pipe(delay(duration, getTestScheduler()))));
+    getTestScheduler().expectObservable(original.pipe(throttleAlternative))
+        .toBe(throttle.marbles);
+
+    const auditAlternativePipe = pipe((s: Observable<string>) =>
+        s.pipe(
+            exhaustMap(_ => of('x').pipe(delay(duration, getTestScheduler()))),
+            withLatestFrom(s),
+            map(([_, v]) => v)),
+    );
+    getTestScheduler().expectObservable(original.pipe(auditAlternativePipe))
+        .toBe(auditTim.marbles);
+  });
+});
 
 describe('Operator map()', () => {
   it('should provide index for the mapper', () => {
@@ -97,20 +181,52 @@ describe('Operator takeUntil()', () => {
   });
 });
 
+describe('Operator debounceTime()', () => {
+  it('should delay emit latest value but complete with last value without respecting the time delay', () => {
+    const o = cold('abc---def-----ghi|   ');
+    const e = cold('----c-----f------(i|)');
+    const operators = debounceTime(time('--|'), getTestScheduler());
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+
+  it('should be like switchMap with delay except for last value', () => {
+    const original = cold('abc---def-----ghi|    ');
+    const duration = time('--|');
+    const debounce = original.pipe(debounceTime(duration, getTestScheduler()));
+    const theOther = original.pipe(switchMap(v => cold('--(x|)', {x: v})));
+    const expectDe = cold('----c-----f------(i|) ');
+    const expectOt = cold('----c-----f-------(i|)');
+
+    getTestScheduler().expectObservable(debounce).toBe(expectDe.marbles);
+    getTestScheduler().expectObservable(theOther).toBe(expectOt.marbles);
+  });
+});
+
 describe('Operator throttleTime()', () => {
   it('should not change original flow for duration=0', () => {
-    const o = cold('-x-y-z|');
-    const e = cold('-x-y-z|');
+    const o = cold('-abcdef---abc-defg|');
+    const e = cold('-abcdef---abc-defg|');
     const operators = throttleTime(0, getTestScheduler());
     expect(o.pipe(operators)).toBeObservable(e);
   });
 
   it('should throttle emissions for duration > 0', () => {
-    const o = cold('-x-y-z|');
-    const e = cold('-x---z|');
-    const t = time(' ---|  ');
+    const o = cold('-abcdef---abc-defg|');
+    const e = cold('-a--d-----a---d--g|');
+    const t = time(' --|');
     const operators = throttleTime(t, getTestScheduler());
     expect(o.pipe(operators)).toBeObservable(e);
+  });
+
+  it('should be like exhaustMap with delay for time guarding except for last complete event', () => {
+    const original = cold('-abcdef---abc-defg| ');
+    const duration = time(' --|');
+    const throttle = original.pipe(throttleTime(duration, getTestScheduler()));
+    const theOther = original.pipe(exhaustMap(v => cold('x-|', {x: v})));
+    const expectTh = cold('-a--d-----a---d--g| ');
+    const expectOt = cold('-a--d-----a---d--g-|');
+    getTestScheduler().expectObservable(throttle).toBe(expectTh.marbles);
+    getTestScheduler().expectObservable(theOther).toBe(expectOt.marbles);
   });
 });
 
@@ -194,6 +310,29 @@ describe('Operator switchMap()', () => {
     expect(y).toHaveSubscriptions(ySubs);
     expect(z).toHaveSubscriptions(zSubs);
   });
+
+  it('should finalize previous observable before starting a new one', () => {
+    const finalizeRecorder = new ReplaySubject<string>(undefined, undefined, getTestScheduler());
+    const o = cold('--X-Y-|         ');
+    const x = cold('  -a---b|       ');
+    const y = cold('    -c--------d|');
+    const e = cold('---a-c------    ');
+    const oSubsM = '^-----------!   ';
+    const xSubs = ['--^-!           ']; // x is unsubscribed earlier
+    const ySubs = ['----^-------!   ']; // y is unsubscribed earlier
+    const eFinal = '----x-------(oy)';
+    const operators = pipe(
+        switchMap((v: 'X' | 'Y') => ({
+          'X': x.pipe(finalize(() => finalizeRecorder.next('x'))),
+          'Y': y.pipe(finalize(() => finalizeRecorder.next('y'))),
+        }[v])),
+        finalize(() => finalizeRecorder.next('o')),
+    );
+    getTestScheduler().expectObservable(o.pipe(operators), oSubsM).toBe(e.marbles, e.values);
+    getTestScheduler().expectSubscriptions(x.getSubscriptions()).toBe(xSubs);
+    getTestScheduler().expectSubscriptions(y.getSubscriptions()).toBe(ySubs);
+    getTestScheduler().expectObservable(finalizeRecorder).toBe(eFinal);
+  });
 });
 
 describe('Operator exhaustMap()', () => {
@@ -212,6 +351,30 @@ describe('Operator exhaustMap()', () => {
     expect(x).toHaveSubscriptions(xSubs);
     expect(y).toHaveSubscriptions(ySubs);
     expect(z).toHaveSubscriptions(zSubs);
+  });
+});
+
+describe('Operator finalize()', () => {
+  it('should run even when the observable is unsubscribed early', () => {
+    const finalizeRecorder = new ReplaySubject<string>(undefined, undefined, getTestScheduler());
+    const o = cold('x-------y|');
+    const oSubsM = '^----!    ';
+    const e = cold('x----     '); // not complete due to early unsubscription
+    const eFinal = '-----v';
+    const operators = finalize(() => finalizeRecorder.next('v'));
+    getTestScheduler().expectObservable(o.pipe(operators), oSubsM).toBe(e.marbles, e.values);
+    getTestScheduler().expectObservable(finalizeRecorder).toBe(eFinal);
+  });
+
+  it('should run even when error', () => {
+    const finalizeRecorder = new ReplaySubject<string>(undefined, undefined, getTestScheduler());
+    const o = cold('x----#    ');
+    const oSubsM = '^         ';
+    const e = cold('x----#    ');
+    const eFinal = '-----v';
+    const operators = finalize(() => finalizeRecorder.next('v'));
+    getTestScheduler().expectObservable(o.pipe(operators), oSubsM).toBe(e.marbles);
+    getTestScheduler().expectObservable(finalizeRecorder).toBe(eFinal);
   });
 });
 
@@ -503,10 +666,19 @@ describe('Operator pairwise()', () => {
 });
 
 describe('Operator distinctUntilChanged()', () => {
-  it('should provide distinct values', () => {
+  it('should not emit 2 adjacent similar items', () => {
     const o = cold('xxy-y-x-zz-|');
     const e = cold('x-y---x-z--|');
     const operators = distinctUntilChanged();
+    expect(o.pipe(operators)).toBeObservable(e);
+  });
+});
+
+describe('Operator distinct()', () => {
+  it('should emit distinct items', () => {
+    const o = cold('xxy-y-x-zz-|');
+    const e = cold('x-y-----z--|');
+    const operators = distinct();
     expect(o.pipe(operators)).toBeObservable(e);
   });
 });

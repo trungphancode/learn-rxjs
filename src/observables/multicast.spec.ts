@@ -1,7 +1,7 @@
 /**
  * Understands how multicast works.
  *
- * Subject: help turn cold observable to hot. It can serves as both observable
+ * Subject: help turn cold observable to hot. It can serve as both observable
  * and observer. Other variants: ReplaySubject, BehaviorSubject, AsyncSubject.
  *
  * To turn a cold observable to hot observable, we just need to make the

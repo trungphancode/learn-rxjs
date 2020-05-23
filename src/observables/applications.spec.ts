@@ -10,10 +10,11 @@ import {concatMap, filter, map, switchMap, takeUntil} from 'rxjs/operators';
 
 describe('Application', () => {
   it('should turn from(Promise) to cold observable with defer()', () => {
-    let nextId = 1;
+    let nextId = 0;
     // do not use from(...) directly, but defer(() => from(...)) to create
     // a cold observable (i.e. only gen Promise when subscribing)
-    const o = defer(() => from(Promise.resolve(nextId++)));
+    const o = defer(() => from(Promise.resolve(++nextId)));
+    // Must test this way because Promise.resolve is async while marbles is sync
     o.subscribe((e) => {
       expect(e).toBe(1);
     });

@@ -10,6 +10,7 @@ import {
   concat,
   defer,
   forkJoin,
+  fromEventPattern,
   iif,
   merge,
   Observable,
@@ -17,11 +18,12 @@ import {
   onErrorResumeNext,
   pipe,
   race,
+  ReplaySubject,
   Subscription,
   timer,
   zip
 } from 'rxjs';
-import {filter, map, take} from 'rxjs/operators';
+import {filter, map, take, tap} from 'rxjs/operators';
 import {
   TestColdObservable,
   TestHotObservable,
@@ -90,6 +92,71 @@ describe('new Observable()', () => {
     getTestScheduler().expectObservable(obsvable1, obsvable1SubsM).toBe(expected1.marbles, expected1.values);
     getTestScheduler().expectObservable(obsvable2, obsvable2SubsM).toBe(expected2.marbles, expected2.values);
     getTestScheduler().expectSubscriptions(producer1.getSubscriptions()).toBe(producer1Subs);
+  });
+});
+
+/**
+ * Operator fromEventPattern is a flexible creation operator. It can simulate all
+ * cases of fromEvent and other patterns.
+ */
+describe('Creation operator fromEventPattern', () => {
+  it('should simulate fromEvent with DOM event listener', () => {
+    const listenerRegistrationRecorder = new ReplaySubject<string>(undefined, undefined, getTestScheduler());
+
+    function createEventStream(element: Element, type: string): Observable<Event> {
+      return fromEventPattern<Event>(
+          (handler) => {
+            element.addEventListener(type, handler);
+            listenerRegistrationRecorder.next('r');
+          },
+          handler => {
+            document.removeEventListener(type, handler);
+            listenerRegistrationRecorder.next('u');
+          },
+      );
+    }
+
+    const clicks: Observable<Event> = createEventStream(document.documentElement, 'click');
+    const doClicks = cold('--c--c--c|').pipe(
+        tap(() => document.documentElement.click()),
+    );
+    getTestScheduler().expectObservable(doClicks, '^').toBe('--c--c--c|');
+    getTestScheduler().expectObservable(clicks.pipe(map(() => 'x')), '^------!').toBe('--x--x');
+    getTestScheduler().expectObservable(listenerRegistrationRecorder).toBe('r------u');
+  });
+
+  it('should simulate Angular Renderer2', () => {
+    const listenerRegistrationRecorder = new ReplaySubject<string>(undefined, undefined, getTestScheduler());
+
+    class Renderer2 {
+      listen(target: Element, eventName: string, callback: (event: Event) => void): () => void {
+        target.addEventListener(eventName, callback);
+        listenerRegistrationRecorder.next('r');
+        // return unListener
+        return () => {
+          target.removeEventListener(eventName, callback);
+          listenerRegistrationRecorder.next('u');
+        };
+      }
+    }
+
+    function createEventStream(renderer2: Renderer2, element: Element, type: string): Observable<Event> {
+      return fromEventPattern<Event>(
+          (handler) => {
+            // return unListener
+            return renderer2.listen(element, type, handler);
+          },
+          (handler, unListener) => unListener(),
+      );
+    }
+
+    const clicks: Observable<Event> = createEventStream(new Renderer2(), document.documentElement, 'click');
+    const doClicks = cold('--c--c--c|').pipe(
+        tap(() => document.documentElement.click()),
+    );
+    getTestScheduler().expectObservable(doClicks, '^').toBe('--c--c--c|');
+    getTestScheduler().expectObservable(clicks.pipe(map(() => 'x')), '^------!').toBe('--x--x');
+    getTestScheduler().expectObservable(listenerRegistrationRecorder).toBe('r------u');
   });
 });
 

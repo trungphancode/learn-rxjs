@@ -12,7 +12,7 @@ import {
   time
 } from 'jasmine-marbles';
 import {delay, tap} from 'rxjs/operators';
-import {timer} from 'rxjs';
+import {defer, from, ReplaySubject, timer} from 'rxjs';
 import {SubscriptionLog} from 'rxjs/internal/testing/SubscriptionLog';
 
 
@@ -136,6 +136,14 @@ describe('Jasmine-marbles', () => {
     const e = cold('10ms x|');
     expect(o).toBeObservable(e);
   });
+
+  it('should support flush to wait for all observables to complete', () => {
+    let tapRun = 0;
+    const o = cold('xyz|');
+    getTestScheduler().expectObservable(o.pipe(tap(() => tapRun++))).toBe(o.marbles);
+    getTestScheduler().flush();
+    expect(tapRun).toBe(3);
+  });
 });
 
 describe('Jasmine-marble tests', () => {
@@ -148,5 +156,20 @@ describe('Jasmine-marble tests', () => {
     // if use time(), then expect with frame to avoid assuming 10ms / frame
     expect(timer(time('--|'), getTestScheduler()))
         .toBeObservable(cold('--(0|)', {'0': 0}));
+  });
+
+  it('should record for non compatible stream', () => {
+    const recorder = new ReplaySubject<string>(undefined, undefined, getTestScheduler());
+    const o = cold('--1-2-3|').pipe(tap(v => recorder.next(`${v * 2}`)));
+    getTestScheduler().expectObservable(o, '--^');
+    getTestScheduler().expectObservable(recorder).toBe('----2-4-6');
+  })
+
+  it('should not test with Promise because Promise is async', () => {
+    const promiseRecorder = new ReplaySubject<string>(undefined, undefined, getTestScheduler());
+    const o = defer(() => from(Promise.resolve('v'))).pipe(tap(v => promiseRecorder.next(v)));
+    getTestScheduler().expectObservable(o, '--^');
+    // The following will fail
+    // getTestScheduler().expectObservable(promiseRecorder).toBe('--v');
   });
 });
