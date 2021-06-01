@@ -42,6 +42,8 @@ import {
 } from 'rxjs';
 import {
   auditTime,
+  buffer,
+  bufferTime,
   catchError,
   combineAll,
   concatAll,
@@ -179,6 +181,12 @@ describe('Operator takeUntil()', () => {
     expect(o.pipe(operators)).toBeObservable(e);
     expect(o).toHaveSubscriptions(oSubs);
   });
+
+  it('should not emit values when takeUntil is also activated', () => {
+    const o = of('a', 'b', 'c');
+    const n = of('n');
+    expect(o.pipe(takeUntil(n))).toBeObservable(cold('|'));
+  });
 });
 
 describe('Operator debounceTime()', () => {
@@ -227,6 +235,13 @@ describe('Operator throttleTime()', () => {
     const expectOt = cold('-a--d-----a---d--g-|');
     getTestScheduler().expectObservable(throttle).toBe(expectTh.marbles);
     getTestScheduler().expectObservable(theOther).toBe(expectOt.marbles);
+  });
+
+  it('should trail', () => {
+    const observable = cold('-abcdef-----abcdef|');
+    const throttled = observable.pipe(
+        throttleTime(time('---|'), getTestScheduler(), {leading: true, trailing: true}));
+    getTestScheduler().expectObservable(throttled).toBe('-a--de--f---a--de-(f|)');
   });
 });
 
